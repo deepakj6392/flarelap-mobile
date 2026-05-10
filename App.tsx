@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, useColorScheme, View, Image, Text, Alert, Linking } from 'react-native';
+import { StyleSheet, SafeAreaView, StatusBar, useColorScheme, View, Image, Text, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import NetInfo from '@react-native-community/netinfo';
 
 function App(): React.JSX.Element {
-  const WEBSITE_URL = 'https://editool.vercel.app/';
+  const WEBSITE_URL = 'https://flarelap.com/';
   const isDarkMode = useColorScheme() === 'dark';
   const [isConnected, setIsConnected] = useState<boolean | null>(true);
 
@@ -74,7 +74,11 @@ function App(): React.JSX.Element {
         startInLoadingState={true}
         renderLoading={() => (
           <View style={styles.loadingContainer}>
-            <Text style={{ color: isDarkMode ? '#fff' : '#000' }}>Loading...</Text>
+            <Image
+              source={require('./assets/logo.png')}
+              style={styles.loadingLogo}
+              resizeMode="contain"
+            />
           </View>
         )}
       />
@@ -118,6 +122,11 @@ const styles = StyleSheet.create({
     right: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  loadingLogo: {
+    width: 120,
+    height: 120,
   }
 });
 
