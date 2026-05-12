@@ -4,7 +4,21 @@ import { WebView } from 'react-native-webview';
 import NetInfo from '@react-native-community/netinfo';
 
 function App(): React.JSX.Element {
-  const WEBSITE_URL = 'https://flarelap.com/';
+  const WEBSITE_URL = 'https://flarelap.com/create';
+  const WEBSITE_ORIGIN = 'https://flarelap.com';
+  const INJECT_MOBILE_CLASS = `
+    (function() {
+      function addMobileClass() {
+        if (document.body) {
+          document.body.classList.add('fl-mobile');
+        }
+      }
+
+      addMobileClass();
+      document.addEventListener('DOMContentLoaded', addMobileClass);
+    })();
+    true;
+  `;
   const isDarkMode = useColorScheme() === 'dark';
   const [isConnected, setIsConnected] = useState<boolean | null>(true);
 
@@ -52,9 +66,25 @@ function App(): React.JSX.Element {
         source={{ uri: WEBSITE_URL }}
         style={styles.webview}
         originWhitelist={['*']}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        thirdPartyCookiesEnabled={true}
+        sharedCookiesEnabled={true}
+        allowFileAccess={true}
+        allowFileAccessFromFileURLs={false}
+        allowUniversalAccessFromFileURLs={false}
+        allowsInlineMediaPlayback={true}
+        allowsFullscreenVideo={true}
+        mediaPlaybackRequiresUserAction={false}
+        mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+        geolocationEnabled={true}
+        downloadingMessage="Downloading file..."
+        lackPermissionToDownloadMessage="Storage permission is required to download files."
+        injectedJavaScriptBeforeContentLoaded={INJECT_MOBILE_CLASS}
+        injectedJavaScript={INJECT_MOBILE_CLASS}
         onShouldStartLoadWithRequest={(request) => {
-          // If the request URL starts with our website URL, load it in the WebView
-          if (request.url.startsWith(WEBSITE_URL)) {
+          // Keep Flarelap pages in the WebView and send outside links to the browser.
+          if (request.url.startsWith(WEBSITE_ORIGIN)) {
             return true;
           }
 
@@ -65,6 +95,9 @@ function App(): React.JSX.Element {
             console.error("Failed to open URL:", e);
           }
           return false;
+        }}
+        onFileDownload={({ nativeEvent }) => {
+          Linking.openURL(nativeEvent.downloadUrl);
         }}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;

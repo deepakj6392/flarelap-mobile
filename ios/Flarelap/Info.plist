@@ -34,8 +34,16 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Flarelap needs camera access so you can capture photos or videos for your designs.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>Flarelap uses your location only when a feature on the website asks for it.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Flarelap needs microphone access when you record video or audio for your designs.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Flarelap needs permission to save downloaded images and videos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Flarelap needs photo library access so you can upload media into your designs.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
