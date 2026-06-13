@@ -5,7 +5,7 @@ import SvgEditor from './editors/SvgEditor';
 export default function BusinessAdsScreen({ route, navigation }: any) {
   return (
     <View style={styles.container}>
-      <SvgEditor route={route} navigation={navigation} />
+      <SvgEditor route={route} navigation={navigation} category={"Business Ads"}/>
     </View>
   );
 }

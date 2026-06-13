@@ -13,8 +13,6 @@
 import React, {
   useState,
   useRef,
-  useCallback,
-  useMemo,
 } from 'react';
 import {
   View,
@@ -34,8 +32,8 @@ import {
   FlatList,
   Platform,
 } from 'react-native';
-import { Text, Title, Button } from 'react-native-paper';
-import Svg, { Path, Circle, G } from 'react-native-svg';
+import { Text, Title } from 'react-native-paper';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { launchImageLibrary } from 'react-native-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { PIXABAY_API_KEY } from '../../constants/config';

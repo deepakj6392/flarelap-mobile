@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { Title, Paragraph, Searchbar, Text } from 'react-native-paper';
+import { Title, Paragraph, Text } from 'react-native-paper';
 
 const TOOLS = [
   {
@@ -66,23 +66,11 @@ const TOOLS = [
 ];
 
 export default function CreateScreen({ navigation }: any) {
-  const [query, setQuery] = React.useState('');
-
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
         <Title style={styles.title}>Let's create something amazing!</Title>
         <Paragraph style={styles.subtitle}>Create stunning designs in minutes with AI-powered tools</Paragraph>
-      </View>
-
-      <View style={styles.searchWrap}>
-        <Searchbar
-          placeholder="Search templates, wallpaper"
-          value={query}
-          onChangeText={setQuery}
-          style={styles.search}
-          inputStyle={styles.searchInput}
-        />
       </View>
 
       <View style={styles.grid}>
@@ -97,15 +85,6 @@ export default function CreateScreen({ navigation }: any) {
           </TouchableOpacity>
         ))}
       </View>
-
-      <View style={styles.trendingRow}>
-        <Title style={styles.trendingTitle}>Trending Designs</Title>
-        <TouchableOpacity>
-          <Text style={styles.viewAll}>View</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={{ height: 120 }} />
     </ScrollView>
   );
 }
@@ -134,5 +113,5 @@ const styles = StyleSheet.create({
   fabInner: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#ff8c4c', justifyContent: 'center', alignItems: 'center', marginBottom: 12, elevation: 6 },
   fabMain: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#df103f', justifyContent: 'center', alignItems: 'center', elevation: 8 },
   fabIcon: { color: '#fff', fontSize: 24, fontWeight: '700' },
-  tileImage: { width: '100%', height: '100%', borderRadius: 12 },
+  tileImage: { width: '100%', height: '100%', borderRadius: 12 }
 });

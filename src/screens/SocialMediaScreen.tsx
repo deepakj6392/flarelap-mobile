@@ -5,7 +5,7 @@ import SvgEditor from './editors/SvgEditor';
 export default function SocialMediaScreen({ navigation, route }: any) {
   return (
     <View style={styles.container}>
-      <SvgEditor route={route} navigation={navigation} />
+      <SvgEditor route={route} navigation={navigation} category={"Social Media"} />
     </View>
   );
 }

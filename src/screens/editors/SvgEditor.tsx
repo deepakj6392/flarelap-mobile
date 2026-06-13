@@ -12,9 +12,13 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  FlatList,
 } from 'react-native';
-import { Title, Button, TextInput, Text, ActivityIndicator } from 'react-native-paper';
+import { Title, Button, TextInput, Text, ActivityIndicator, Portal, Modal } from 'react-native-paper';
 import Svg, { SvgXml, Rect, Circle, Polygon, Line, Path } from 'react-native-svg';
+import { Template } from '../../../types/template';
+import { getAllTemplates } from '../../services/template.service';
 
 // Custom inline SVG icons for dependency-free rendering
 const UndoIcon = ({ size = 20, color = '#334155' }) => (
@@ -126,282 +130,6 @@ const ItalicIcon = ({ size = 18, color = '#334155' }) => (
 const { width: screenWidth } = Dimensions.get('window');
 const CANVAS_SIZE = Math.min(screenWidth - 32, 400);
 
-// Pre-defined high-quality SVG Templates
-const TEMPLATES = [
-  {
-    id: 'holiday_welcome',
-    name: 'Holiday Card',
-    color: '#FFE3E3',
-    backgroundColor: '#FFF5F5',
-    items: [
-      {
-        type: 'shape' as const,
-        shapeType: 'circle' as const,
-        x: 60,
-        y: 60,
-        width: 280,
-        height: 280,
-        color: '#FFE3E3',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'shape' as const,
-        shapeType: 'path' as const,
-        x: 60,
-        y: 60,
-        width: 280,
-        height: 140,
-        pathD: 'M 0 140 Q 140 0 280 140',
-        pathViewBox: '0 0 280 140',
-        color: 'none',
-        strokeColor: '#FF8E94',
-        strokeWidth: 4,
-        strokeDasharray: '10,5',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'shape' as const,
-        shapeType: 'path' as const,
-        x: 60,
-        y: 200,
-        width: 280,
-        height: 140,
-        pathD: 'M 0 0 Q 140 140 280 0',
-        pathViewBox: '0 0 280 140',
-        color: 'none',
-        strokeColor: '#FF8E94',
-        strokeWidth: 4,
-        strokeDasharray: '10,5',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 145,
-        width: 300,
-        height: 50,
-        text: 'HAPPY HOLIDAYS',
-        fontSize: 28,
-        fontWeight: 'bold' as const,
-        color: '#D32F2F',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 225,
-        width: 300,
-        height: 30,
-        text: 'Wishing you joy and peace',
-        fontSize: 14,
-        color: '#E53935',
-        rotation: 0,
-        opacity: 1,
-      },
-    ],
-  },
-  {
-    id: 'business_logo',
-    name: 'Modern Logo',
-    color: '#38BDF8',
-    backgroundColor: '#0F172A',
-    items: [
-      {
-        type: 'shape' as const,
-        shapeType: 'circle' as const,
-        x: 90,
-        y: 90,
-        width: 220,
-        height: 220,
-        color: 'none',
-        strokeColor: '#38BDF8',
-        strokeWidth: 4,
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'shape' as const,
-        shapeType: 'triangle' as const,
-        x: 160,
-        y: 120,
-        width: 80,
-        height: 110,
-        color: '#38BDF8',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 300,
-        width: 300,
-        height: 40,
-        text: 'FLARELAP TECH',
-        fontSize: 24,
-        fontWeight: 'bold' as const,
-        color: '#F8FAFC',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 67.5,
-        width: 300,
-        height: 25,
-        text: 'INNOVATE & ELEVATE',
-        fontSize: 12,
-        color: '#94A3B8',
-        rotation: 0,
-        opacity: 1,
-      },
-    ],
-  },
-  {
-    id: 'summer_sale',
-    name: 'Summer Sale',
-    color: '#FFFBEB',
-    backgroundColor: '#FFFBEB',
-    items: [
-      {
-        type: 'shape' as const,
-        shapeType: 'path' as const,
-        x: 0,
-        y: 0,
-        width: 150,
-        height: 150,
-        pathD: 'M 0 0 L 150 0 L 0 150 Z',
-        pathViewBox: '0 0 150 150',
-        color: '#FBBF24',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'shape' as const,
-        shapeType: 'path' as const,
-        x: 250,
-        y: 250,
-        width: 150,
-        height: 150,
-        pathD: 'M 150 150 L 0 150 L 150 0 Z',
-        pathViewBox: '0 0 150 150',
-        color: '#FBBF24',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'shape' as const,
-        shapeType: 'circle' as const,
-        x: 285,
-        y: 45,
-        width: 70,
-        height: 70,
-        color: '#F59E0B',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 145,
-        width: 300,
-        height: 70,
-        text: 'SUMMER',
-        fontSize: 44,
-        fontWeight: 'bold' as const,
-        color: '#B45309',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 210,
-        width: 300,
-        height: 40,
-        text: 'BIG SALE 50% OFF',
-        fontSize: 24,
-        fontWeight: 'bold' as const,
-        color: '#D97706',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'shape' as const,
-        shapeType: 'line' as const,
-        x: 100,
-        y: 258,
-        width: 200,
-        height: 4,
-        color: '#F59E0B',
-        strokeWidth: 4,
-        rotation: 0,
-        opacity: 1,
-      },
-    ],
-  },
-  {
-    id: 'abstract_social',
-    name: 'Social Banner',
-    color: '#EC4899',
-    backgroundColor: '#312E81',
-    items: [
-      {
-        type: 'shape' as const,
-        shapeType: 'circle' as const,
-        x: -20,
-        y: 180,
-        width: 240,
-        height: 240,
-        color: '#3B82F6',
-        opacity: 0.3,
-        rotation: 0,
-      },
-      {
-        type: 'shape' as const,
-        shapeType: 'rect' as const,
-        x: 240,
-        y: 50,
-        width: 120,
-        height: 120,
-        borderRadius: 20,
-        color: '#EC4899',
-        opacity: 0.3,
-        rotation: 45,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 170,
-        width: 300,
-        height: 50,
-        text: 'CREATIVE MIND',
-        fontSize: 34,
-        fontWeight: 'bold' as const,
-        color: '#FFFFFF',
-        rotation: 0,
-        opacity: 1,
-      },
-      {
-        type: 'text' as const,
-        x: 50,
-        y: 220,
-        width: 300,
-        height: 30,
-        text: 'Inspiring the Next Generation',
-        fontSize: 16,
-        color: '#E0E7FF',
-        rotation: 0,
-        opacity: 1,
-      },
-    ],
-  },
-];
-
 const STOCK_IMAGES = [
   { name: 'Gradient Pink', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=400' },
   { name: 'Nebula Space', url: 'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=400' },
@@ -415,6 +143,23 @@ const PRESET_COLORS = [
   '#F97316', '#F59E0B', '#10B981', '#06B6D4',
   '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899',
   '#F43F5E', '#14B8A6', '#84CC16', '#FFD700',
+];
+import InstagramPostIcon from '../../assets/icons/social/thumbnail_instagram_post.svg';
+import FacebookCoverIcon from '../../assets/icons/social/thumbnail_facebook_cover_landscape.svg';
+import FacebookPostIcon from '../../assets/icons/social/thumbnail_facebook_post.svg';
+import XCoverIcon from '../../assets/icons/social/thumbnail_x_post_landscape_16_9.svg';
+import YouTubeThumbIcon from '../../assets/icons/social/thumbnail_youtube_intro.svg';
+import LinkedInBannerIcon from '../../assets/icons/social/thumbnail_linkedin_banner_landscape.svg';
+import PinterestPinIcon from '../../assets/icons/social/thumbnail_pinterest_pin_portrait.svg';
+
+const SOCIAL_SUBCATS = [
+  { id: 'instagram_post', title: 'Instagram Post', icon:<InstagramPostIcon width={150} height={150} />, size: '1080 x 1080' },
+  { id: 'facebook_cover', title: 'Facebook Cover', icon:<FacebookCoverIcon width={150} height={150} />, size: '851 x 315' },
+  { id: 'facebook_post', title: 'Facebook Post', icon:<FacebookPostIcon width={150} height={150} />, size: '1200 x 630' },
+  { id: 'x_cover', title: 'X Cover', icon:<XCoverIcon width={150} height={150} />, size: '900 x 300' },
+  { id: 'youtube_thumb', title: 'YouTube Thumbnail', icon:<YouTubeThumbIcon width={150} height={150} />, size: '1280 x 720' },
+  { id: 'linkedin_banner', title: 'LinkedIn Banner', icon:<LinkedInBannerIcon width={150} height={150} />, size: '1584 x 396' },
+  { id: 'pinterest_pin', title: 'Pinterest Pin', icon:<PinterestPinIcon width={150} height={150} />, size: '1000 x 1500' },
 ];
 
 // Types
@@ -745,7 +490,7 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
 }
 
 // Main Canvas Editor Component
-export default function SvgEditor({ route, navigation }: { route?: any; navigation?: any }) {
+export default function SvgEditor({ route, navigation, category }: { route?: any; navigation?: any; category?: any }) {
   const svgUrl: string | undefined = route?.params?.svgUrl;
   const initialSvgText: string | undefined = route?.params?.svgText;
 
@@ -757,7 +502,9 @@ export default function SvgEditor({ route, navigation }: { route?: any; navigati
   const [items, setItems] = useState<Item[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [bgColor, setBgColor] = useState('#FFFFFF');
-
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [subCategory, setSubCategory] = useState<string | null>(null);
+  const [showSocialModal, setShowSocialModal] = useState(false);
   // Toolbar & Panels state
   const [activeTab, setActiveTab] = useState<'templates' | 'add' | 'styles' | 'layers' | 'canvas'>('templates');
 
@@ -772,6 +519,26 @@ export default function SvgEditor({ route, navigation }: { route?: any; navigati
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  
+  // derive incoming category from prop or route param
+  const incomingCategory = category ?? route?.params?.category;
+
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      const data = await getAllTemplates(incomingCategory, subCategory);
+      console.log(data);
+      setTemplates(data?.templates || []);
+    };
+    fetchTemplates();
+  }, [incomingCategory, subCategory]);
+
+  // Auto-open social subcategory modal when incoming category is 'Social Media'
+  useEffect(() => {
+    if (incomingCategory === 'Social Media') {
+      setShowSocialModal(true);
+    }
+  }, [incomingCategory]);
 
   // Load initial URL SVG if provided
   useEffect(() => {
@@ -1000,8 +767,8 @@ export default function SvgEditor({ route, navigation }: { route?: any; navigati
   };
 
   // Load SVG Template
-  const handleLoadTemplate = (tmpl: typeof TEMPLATES[number] | null) => {
-    const performLoad = () => {
+  const handleLoadTemplate = (tmpl: Template | null) => {
+    const performLoad = async () => {
       if (!tmpl) {
         setSvgText(null);
         setItems([]);
@@ -1010,25 +777,169 @@ export default function SvgEditor({ route, navigation }: { route?: any; navigati
         setActiveTemplateId(null);
         setHistory([[]]);
         setHistoryIndex(0);
-      } else {
-        const scale = CANVAS_SIZE / 400;
-        const mappedItems: Item[] = tmpl.items.map((item, idx) => ({
-          ...item,
-          id: `${tmpl.id}_item_${idx}_${nextId.current++}`,
-          x: item.x * scale,
-          y: item.y * scale,
-          width: item.width * scale,
-          height: item.height * scale,
-        }));
+        return;
+      }
 
-        setSvgText(null);
-        setBgColor(tmpl.backgroundColor);
-        setItems(mappedItems);
+      // load svg from template.svg_url
+      if (!tmpl.svg_url) {
+        Alert.alert('Template missing', 'This template has no svg URL available.');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await fetch(tmpl.svg_url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+
+        // Try to parse common SVG elements into editable overlay items
+        const parseAttrs = (s: string) => {
+          const attrs: Record<string, string> = {};
+          s.replace(/([a-zA-Z0-9:_-]+)=("|')([^"']*)("|')/g, (_m, k, _q, v) => {
+            attrs[k] = v;
+            return '';
+          });
+          return attrs;
+        };
+
+        const itemsFromSvg: Item[] = [];
+
+        // Determine svg root viewBox / dimensions so we can map coordinates to the editor canvas
+        const svgRootRe = /<svg\b([^>]*)>/i;
+        const svgRootMatch = svgRootRe.exec(text);
+        let vbMinX = 0;
+        let vbMinY = 0;
+        let svgW = 400;
+        let svgH = 400;
+        if (svgRootMatch) {
+          const rootAttrs = parseAttrs(svgRootMatch[1]);
+          const vbRaw = rootAttrs.viewBox || rootAttrs.viewbox || rootAttrs.viewBOX;
+          if (vbRaw) {
+            const parts = vbRaw.trim().split(/[,\s]+/).map(Number).filter(n => !isNaN(n));
+            if (parts.length >= 4) {
+              vbMinX = parts[0];
+              vbMinY = parts[1];
+              svgW = parts[2] || svgW;
+              svgH = parts[3] || svgH;
+            }
+          } else {
+            const wRaw = parseFloat(rootAttrs.width || '0');
+            const hRaw = parseFloat(rootAttrs.height || '0');
+            if (wRaw > 0 && hRaw > 0) {
+              svgW = wRaw;
+              svgH = hRaw;
+            }
+          }
+        }
+
+        // Map SVG coordinates -> canvas coordinates (fit within CANVAS_SIZE)
+        const scaleX = CANVAS_SIZE / svgW;
+        const scaleY = CANVAS_SIZE / svgH;
+        const scale = Math.min(scaleX, scaleY);
+        const offsetX = (CANVAS_SIZE - svgW * scale) / 2;
+        const offsetY = (CANVAS_SIZE - svgH * scale) / 2;
+
+        const mapX = (x: number) => Math.round((x - vbMinX) * scale + offsetX);
+        const mapY = (y: number) => Math.round((y - vbMinY) * scale + offsetY);
+        const mapW = (w: number) => Math.max(2, Math.round(w * scale));
+        const mapH = (h: number) => Math.max(2, Math.round(h * scale));
+
+        // TEXT nodes
+        let m: RegExpExecArray | null;
+        const textRe = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
+        while ((m = textRe.exec(text))) {
+          const attrs = parseAttrs(m[1]);
+          const content = m[2].replace(/<[^>]+>/g, '').trim();
+          const fontSize = parseFloat(attrs['font-size'] || attrs['fontSize'] || '20') || 20;
+          const rawX = parseFloat(attrs.x || attrs['x'] || '') || svgW / 2;
+          const rawY = parseFloat(attrs.y || attrs['y'] || '') || svgH / 2;
+          const x = mapX(rawX);
+          const y = mapY(rawY);
+          const color = attrs.fill || '#000000';
+          const mappedFont = Math.max(8, Math.round(fontSize * scale));
+          const id = `svg_text_${nextId.current++}`;
+          itemsFromSvg.push({ id, type: 'text', x, y, width: Math.max(40, (content.length || 6) * (mappedFont * 0.5)), height: mappedFont * 1.4, rotation: 0, text: content, fontSize: mappedFont, color });
+        }
+
+        // IMAGE nodes
+        const imgRe = /<image\b([^>]*)\/?>(?:<\/image>)?/gi;
+        while ((m = imgRe.exec(text))) {
+          const attrs = parseAttrs(m[1]);
+          const href = attrs.href || attrs['xlink:href'] || attrs.xlinkHref || attrs.src;
+          if (!href) continue;
+          const rawX = parseFloat(attrs.x || '0') || 0;
+          const rawY = parseFloat(attrs.y || '0') || 0;
+          const rawW = parseFloat(attrs.width || '120') || 120;
+          const rawH = parseFloat(attrs.height || '120') || 120;
+          const x = mapX(rawX);
+          const y = mapY(rawY);
+          const w = mapW(rawW);
+          const h = mapH(rawH);
+          const id = `svg_img_${nextId.current++}`;
+          itemsFromSvg.push({ id, type: 'image', x, y, width: w, height: h, rotation: 0, uri: href });
+        }
+
+        // RECT nodes
+        const rectRe = /<rect\b([^>]*)\/?>(?:<\/rect>)?/gi;
+        while ((m = rectRe.exec(text))) {
+          const attrs = parseAttrs(m[1]);
+          const rawX = parseFloat(attrs.x || '0') || 0;
+          const rawY = parseFloat(attrs.y || '0') || 0;
+          const rawW = parseFloat(attrs.width || '100') || 100;
+          const rawH = parseFloat(attrs.height || '100') || 100;
+          const fill = attrs.fill || '#df103f';
+          const rx = parseFloat(attrs.rx || '0') || 0;
+          const x = mapX(rawX);
+          const y = mapY(rawY);
+          const w = mapW(rawW);
+          const h = mapH(rawH);
+          const id = `svg_rect_${nextId.current++}`;
+          itemsFromSvg.push({ id, type: 'shape', shapeType: 'rect', x, y, width: w, height: h, rotation: 0, color: fill, borderRadius: Math.round(rx * scale) });
+        }
+
+        // CIRCLE nodes
+        const circRe = /<circle\b([^>]*)\/?>(?:<\/circle>)?/gi;
+        while ((m = circRe.exec(text))) {
+          const attrs = parseAttrs(m[1]);
+          const cx = parseFloat(attrs.cx || '0') || 0;
+          const cy = parseFloat(attrs.cy || '0') || 0;
+          const r = parseFloat(attrs.r || '10') || 10;
+          const id = `svg_circ_${nextId.current++}`;
+          const x = mapX(cx - r);
+          const y = mapY(cy - r);
+          const d = mapW(r * 2);
+          itemsFromSvg.push({ id, type: 'shape', shapeType: 'circle', x, y, width: d, height: d, rotation: 0, color: attrs.fill || '#df103f' });
+        }
+
+        // PATH nodes -> store as path item (editable limitedly)
+        const pathRe = /<path\b([^>]*)\/?>/gi;
+        while ((m = pathRe.exec(text))) {
+          const attrs = parseAttrs(m[1]);
+          const d = attrs.d || '';
+          if (!d) continue;
+          const id = `svg_path_${nextId.current++}`;
+          itemsFromSvg.push({ id, type: 'shape', shapeType: 'path', x: 0, y: 0, width: CANVAS_SIZE, height: CANVAS_SIZE, rotation: 0, color: attrs.fill || '#df103f', pathD: d, pathViewBox: `${vbMinX} ${vbMinY} ${svgW} ${svgH}` });
+        }
+
+        // If we parsed items, use them as editable overlays; otherwise keep svgText
+        if (itemsFromSvg.length > 0) {
+          setSvgText(null);
+          setItems(itemsFromSvg);
+        } else {
+          setSvgText(text);
+          setItems([]);
+        }
+
+        setBgColor('#FFFFFF');
         setSelected(null);
         setActiveTemplateId(tmpl.id);
 
-        setHistory([mappedItems]);
+        setHistory([itemsFromSvg.length > 0 ? itemsFromSvg : []]);
         setHistoryIndex(0);
+      } catch (e: any) {
+        Alert.alert('Failed to load template', e?.message || 'Could not fetch SVG');
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -1188,7 +1099,7 @@ export default function SvgEditor({ route, navigation }: { route?: any; navigati
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerBtn}>
             <CloseIcon size={20} color="#0F172A" />
           </TouchableOpacity>
-          <Title style={styles.headerTitle}>Flarelap Studio</Title>
+          <Title style={styles.headerTitle}>{category}</Title>
           <View style={styles.headerRight}>
             <TouchableOpacity onPress={handleUndo} disabled={historyIndex <= 0} style={[styles.actionIconBtn, historyIndex <= 0 && styles.disabledBtn]}>
               <UndoIcon size={18} color={historyIndex <= 0 ? '#cbd5e1' : '#0f172a'} />
@@ -1259,14 +1170,14 @@ export default function SvgEditor({ route, navigation }: { route?: any; navigati
                     <Text style={styles.templateLabel}>Blank Canvas</Text>
                   </TouchableOpacity>
 
-                  {TEMPLATES.map((tmpl) => (
+                  {templates.map((tmpl) => (
                     <TouchableOpacity
                       key={tmpl.id}
                       onPress={() => handleLoadTemplate(tmpl)}
                       style={[styles.templateCard, activeTemplateId === tmpl.id && styles.activeTemplateCard]}
                     >
-                      <View style={[styles.templateCardPreview, { backgroundColor: tmpl.color }]}>
-                        <Text style={styles.templateInitial}>{tmpl.name.charAt(0)}</Text>
+                      <View style={[styles.templateCardPreview]}>
+                        <Image source={{ uri: tmpl.thumbnail }} style={styles.templateImage} />
                       </View>
                       <Text style={styles.templateLabel} numberOfLines={1}>
                         {tmpl.name}
@@ -1684,6 +1595,34 @@ export default function SvgEditor({ route, navigation }: { route?: any; navigati
             </TouchableOpacity>
           </View>
         </View>
+        {/* Social Media Subcategory Modal */}
+        <Portal>
+          <Modal visible={showSocialModal} onDismiss={() => setShowSocialModal(false)} contentContainerStyle={styles.socialModal}>
+            <Text style={styles.modalTitle}>Pick a Social Template</Text>
+            <FlatList
+              data={SOCIAL_SUBCATS}
+              keyExtractor={(s: any) => s.id}
+              numColumns={2}
+              columnWrapperStyle={styles.modalRow}
+              renderItem={({ item }: { item: any }) => (
+                <TouchableOpacity
+                  style={styles.modalTemplateCard}
+                  onPress={() => {
+                    setSubCategory(item.title);
+                    setShowSocialModal(false);
+                  }}
+                >
+                  <View style={[styles.modalTemplatePreview, styles.activeTemplateCard]}>
+                    {item.icon}
+                  </View>
+                  <Text style={styles.templateLabel}>{item.title}</Text>
+                  <Text style={styles.templateSize}>{item.size}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <Button onPress={() => setShowSocialModal(false)} style={styles.modalCloseBtn}>Close</Button>
+          </Modal>
+        </Portal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1834,12 +1773,13 @@ const styles = StyleSheet.create({
   // Template Scroll gallery
   templatesScroll: { gap: 12, paddingVertical: 4 },
   templateCard: {
-    width: 90,
+    width: 125,
+    height: 125,
     alignItems: 'center',
   },
   templateCardPreview: {
-    width: 80,
-    height: 80,
+    width: 120,
+    height: 120,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1853,6 +1793,7 @@ const styles = StyleSheet.create({
   },
   templateLabel: { fontSize: 11, color: '#475569', textAlign: 'center', fontWeight: '500' },
   templateInitial: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
+  templateSize: { fontSize: 11, color: '#64748b', textAlign: 'center' },
 
   // Elements Panel styling
   elementsContainer: { gap: 16, paddingVertical: 6 },
@@ -1987,4 +1928,11 @@ const styles = StyleSheet.create({
   // Empty Panels
   emptyStylesPanel: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   emptyStylesText: { fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 20, fontWeight: '500' },
+  templateImage: { width: 120, height: 120, borderRadius: 8 },
+  socialModal: { backgroundColor: '#ffffff', padding: 16, margin: 20, borderRadius: 12, maxHeight: 600 },
+  modalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  modalRow: { justifyContent: 'space-between', marginBottom: 12 },
+  modalTemplateCard: { width: '48%', alignItems: 'center', marginBottom: 10 },
+  modalTemplatePreview: { width: 150, height: 150, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 6, backgroundColor: '#f8fafc' },
+  modalCloseBtn: { marginTop: 8, borderRadius: 8 },
 });

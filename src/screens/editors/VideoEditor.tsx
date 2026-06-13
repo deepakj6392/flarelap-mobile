@@ -21,11 +21,15 @@ import {
   ActivityIndicator,
   TextInput as RNTextInput,
 } from 'react-native';
-import { Title, Button, Text, TextInput } from 'react-native-paper';
+import { Title, Button, Text } from 'react-native-paper';
 import Video from 'react-native-video';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import api from '../../services/api.service';
+
+import CustomizeVideoIcon from '../../assets/icons/social/thumbnail_customize_video.svg';
+import InstagramStoryIcon from '../../assets/icons/social/thumbnail_instagram_story.svg';
+import YouTubeIntroIcon from '../../assets/icons/social/thumbnail_youtube_intro.svg';
 
 // ─── Dimensions ────────────────────────────────────────────────────────────────
 const { width: screenWidth } = Dimensions.get('window');
@@ -59,6 +63,15 @@ const PRESET_COLORS = [
   '#FFFFFF', '#000000', '#EF4444', '#F97316',
   '#F59E0B', '#10B981', '#06B6D4', '#3B82F6',
   '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E',
+];
+
+const VIDEO_SOCIAL_SUBCATS = [
+  { id: 'customize', title: 'Customize Video', icon:<CustomizeVideoIcon width={150} height={150} />, size: '322 x 572' },
+  { id: 'instagram_story', title: 'Instagram Story', icon:<InstagramStoryIcon width={150} height={150} />, size: '1080 x 1920' },
+  { id: 'facebook_story', title: 'Facebook Story', icon:<InstagramStoryIcon width={150} height={150} />, size: '1080 x 1920' },
+  { id: 'youtube_shorts', title: 'YouTube Shorts', icon:<InstagramStoryIcon width={150} height={150} />, size: '1080 x 1920' },
+  { id: 'youtube_intro', title: 'YouTube Intro', icon:<YouTubeIntroIcon width={150} height={150} />, size: '1080 x 1080' },
+  { id: 'tiktok_video', title: 'TikTok Video', icon:<InstagramStoryIcon width={150} height={150} />, size: '1080 x 1920' },
 ];
 
 const SPEED_OPTIONS = [
@@ -341,6 +354,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
   const nextId = useRef(1);
 
+  // Social modal state (open when incoming category is Social Media)
+  const [showSocialModal, setShowSocialModal] = useState(false);
+  const [videoSubCategory, setVideoSubCategory] = useState<string | null>(null);
+
   // Music
   const [selectedMusic, setSelectedMusic] = useState<string>('none');
   const [musicVolume, setMusicVolume]     = useState(0.7);
@@ -401,6 +418,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       setHistoryIdx(-1);
     }
   };
+
+  useEffect(() => {
+     setShowSocialModal(true);
+  }, []);
 
   const recordVideo = async () => {
     const res = await launchCamera({ mediaType: 'video', videoQuality: 'high', durationLimit: 300 });
@@ -914,6 +935,29 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
 
       </KeyboardAvoidingView>
 
+      {/* ── Social Subcategory Modal (opens when route param category === 'Social Media') ── */}
+      <Modal visible={showSocialModal} animationType="slide" transparent onRequestClose={() => setShowSocialModal(false)}>
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard}>
+            <Title style={styles.modalTitle}>Choose a social template</Title>
+            <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom:10 }}>
+              {VIDEO_SOCIAL_SUBCATS.map((s) => (
+                <TouchableOpacity key={s.id} style={{ width: '48%', marginBottom: 12 }} onPress={() => { setVideoSubCategory(s.id); setShowSocialModal(false); }}>
+                  <View style={[styles.musicCard, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e6e9ef', height: 150, width: 150, justifyContent: 'center' }]}>
+                    {s.icon}
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }}>{s.title}</Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>{s.size}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <Button mode="contained" buttonColor="#df103f" onPress={() => setShowSocialModal(false)} style={styles.modalBtn}>Close</Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Add Text Modal ── */}
       <Modal visible={textModalVisible} animationType="slide" transparent onRequestClose={() => setTextModalVisible(false)}>
         <View style={styles.modalBg}>
@@ -962,7 +1006,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
             </View>
           </View>
         </View>
-      </Modal>
+  </Modal>
     </SafeAreaView>
   );
 }
@@ -1092,4 +1136,9 @@ const styles = StyleSheet.create({
   textPreviewBox: { backgroundColor: '#000', borderRadius: 8, padding: 12, alignItems: 'center', justifyContent: 'center', marginVertical: 8, minHeight: 50 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 },
   modalBtn: { minWidth: 100 },
+  socialGridRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
+  socialCardWrap: { width: '48%', marginBottom: 12 },
+  socialCardInner: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e6e9ef', height: 120, justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
+  socialCardTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  socialCardSize: { fontSize: 11, color: '#64748b', marginTop: 6 },
 });

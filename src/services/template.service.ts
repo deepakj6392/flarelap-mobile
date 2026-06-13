@@ -1,8 +1,10 @@
 import { API_ROUTES } from "../constants/routes";
 import api from "./api.service";
 
-export const getAllTemplates = async () => {
-    const response = await api.get(API_ROUTES.TEMPLATES);
+export const getAllTemplates = async (category: string, subCategory: string | null = null) => {
+    const response = await api.get(API_ROUTES.TEMPLATES, {
+        params: { category, subCategory }
+    });
     return response.data;
 };
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, FlatList, Image } from 'react-native';
 import { Title, Paragraph, Card, Text, Menu, Button } from 'react-native-paper';
-import { getTrendingTemplates } from '../../services/template.service';
+import { getAllTemplates } from '../../services/template.service';
 import { Template } from '../../../types/template';
 
 const CATEGORIES = ['All', 'Social Media', 'Business Ads', 'Card Maker', 'Promotion', 'Wallpaper', 'Logos & Sticker'];
@@ -16,7 +16,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const fetchTemplates = async () => {
-      const data = await getTrendingTemplates(40,0);
+      const data = await getAllTemplates('Social Media');
       console.log(data)
       setTemplates(data?.templates);
     };

@@ -15,7 +15,7 @@ import {
   Share,
   Modal,
 } from 'react-native';
-import { Title, Button, TextInput, Text, ActivityIndicator } from 'react-native-paper';
+import { Title, Button, TextInput, Text } from 'react-native-paper';
 import Svg, {
   Defs,
   Filter,
@@ -728,7 +728,7 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerBtn}>
             <CloseIcon size={20} color="#F8FAFC" />
           </TouchableOpacity>
-          <Title style={styles.headerTitle}>Flarelap Editor</Title>
+          <Title style={styles.headerTitle}>Photo Editor</Title>
           <View style={styles.headerRight}>
             <TouchableOpacity
               onPress={handleUndo}
