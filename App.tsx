@@ -1,121 +1,64 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, useColorScheme, View, Image, Text, Linking } from 'react-native';
-import { WebView } from 'react-native-webview';
-import NetInfo from '@react-native-community/netinfo';
+import 'react-native-gesture-handler';
+import React from 'react';
+import { StyleSheet, useColorScheme } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import SplashScreen from './src/screens/SplashScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import SignupScreen from './src/screens/SignupScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
+import MainTabs from './src/navigation/MainTabs';
+import { Provider as PaperProvider, MD3LightTheme as DefaultTheme } from 'react-native-paper';
+import { THEME_COLORS } from './src/constants';
+import SocialMediaScreen from './src/screens/SocialMediaScreen';
+import PhotoEditorScreen from './src/screens/PhotoEditorScreen';
+import VideoEditorScreen from './src/screens/VideoEditorScreen';
+import MagicToolScreen from './src/screens/MagicToolScreen';
+import LogoStickerScreen from './src/screens/LogoMakerScreen';
+import CardMakerScreen from './src/screens/CardMakerScreen';
+import QRCodeGeneratorScreen from './src/screens/QRCodeGeneratorScreen';
+import BusinessAdsScreen from './src/screens/BusinessAdsScreen';
+import CustomSizeScreen from './src/screens/CustomSizeScreen';
+import PromotionScreen from './src/screens/PromotionScreen';
+
+const Stack = createNativeStackNavigator();
 
 function App(): React.JSX.Element {
-  const WEBSITE_URL = 'https://flarelap.com/create';
-  const WEBSITE_ORIGIN = 'https://flarelap.com';
-  const INJECT_MOBILE_CLASS = `
-    (function() {
-      function addMobileClass() {
-        if (document.body) {
-          document.body.classList.add('fl-mobile');
-        }
-      }
-
-      addMobileClass();
-      document.addEventListener('DOMContentLoaded', addMobileClass);
-    })();
-    true;
-  `;
   const isDarkMode = useColorScheme() === 'dark';
-  const [isConnected, setIsConnected] = useState<boolean | null>(true);
 
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setIsConnected(state.isConnected);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  if (isConnected === false) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar
-          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-          backgroundColor={isDarkMode ? '#000000' : '#ffffff'}
-        />
-        <View style={styles.offlineContainer}>
-          <Image
-            source={require('./assets/no_internet.png')}
-            style={styles.offlineImage}
-            resizeMode="contain"
-          />
-          <Text style={[styles.offlineText, { color: isDarkMode ? '#fff' : '#000' }]}>
-            No Internet Connection
-          </Text>
-          <Text style={[styles.offlineSubText, { color: isDarkMode ? '#ccc' : '#666' }]}>
-            Please check your internet connection and try again.
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const theme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      primary: THEME_COLORS.primary,
+      secondary: THEME_COLORS.secondary,
+      // keep other colors from DefaultTheme
+    },
+  } as typeof DefaultTheme;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={isDarkMode ? '#000000' : '#ffffff'}
-      />
-      <WebView
-        source={{ uri: WEBSITE_URL }}
-        style={styles.webview}
-        originWhitelist={['*']}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        thirdPartyCookiesEnabled={true}
-        sharedCookiesEnabled={true}
-        allowFileAccess={true}
-        allowFileAccessFromFileURLs={false}
-        allowUniversalAccessFromFileURLs={false}
-        allowsInlineMediaPlayback={true}
-        allowsFullscreenVideo={true}
-        mediaPlaybackRequiresUserAction={false}
-        mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
-        geolocationEnabled={true}
-        downloadingMessage="Downloading file..."
-        lackPermissionToDownloadMessage="Storage permission is required to download files."
-        injectedJavaScriptBeforeContentLoaded={INJECT_MOBILE_CLASS}
-        injectedJavaScript={INJECT_MOBILE_CLASS}
-        onShouldStartLoadWithRequest={(request) => {
-          // Keep Flarelap pages in the WebView and send outside links to the browser.
-          if (request.url.startsWith(WEBSITE_ORIGIN)) {
-            return true;
-          }
-
-          // Otherwise, open in external browser
-          try {
-            Linking.openURL(request.url);
-          } catch (e) {
-            console.error("Failed to open URL:", e);
-          }
-          return false;
-        }}
-        onFileDownload={({ nativeEvent }) => {
-          Linking.openURL(nativeEvent.downloadUrl);
-        }}
-        onError={(syntheticEvent) => {
-          const { nativeEvent } = syntheticEvent;
-          console.warn('WebView error: ', nativeEvent);
-          // Optional: handle specific webview errors here
-        }}
-        startInLoadingState={true}
-        renderLoading={() => (
-          <View style={styles.loadingContainer}>
-            <Image
-              source={require('./assets/logo.png')}
-              style={styles.loadingLogo}
-              resizeMode="contain"
-            />
-          </View>
-        )}
-      />
-    </SafeAreaView>
+    <PaperProvider theme={theme}>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
+          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Signup" component={SignupScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="Main" component={MainTabs} />
+          {/* editors */}
+          <Stack.Screen name="SocialMedia" component={SocialMediaScreen} />
+          <Stack.Screen name="PhotoEditor" component={PhotoEditorScreen} />
+          <Stack.Screen name="VideoEditor" component={VideoEditorScreen} />
+          <Stack.Screen name="MagicTool" component={MagicToolScreen} />
+          <Stack.Screen name="LogoSticker" component={LogoStickerScreen} />
+          <Stack.Screen name="CardMaker" component={CardMakerScreen} />
+          <Stack.Screen name="BusinessAds" component={BusinessAdsScreen} />
+          <Stack.Screen name="CustomSize" component={CustomSizeScreen} />
+          <Stack.Screen name="Promotion" component={PromotionScreen} />
+          <Stack.Screen name="QRCodeGenerator" component={QRCodeGeneratorScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </PaperProvider>
   );
 }
 
@@ -124,43 +67,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000', // Match dark mode
   },
-  webview: {
-    flex: 1,
-  },
-  offlineContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  offlineImage: {
-    width: 150,
-    height: 150,
-    marginBottom: 20,
-  },
-  offlineText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  offlineSubText: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000',
-  },
-  loadingLogo: {
-    width: 120,
-    height: 120,
-  }
 });
 
 export default App;
