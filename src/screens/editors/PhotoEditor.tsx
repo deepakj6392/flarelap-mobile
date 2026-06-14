@@ -14,6 +14,7 @@ import {
   Platform,
   Share,
   Modal,
+  PermissionsAndroid,
 } from 'react-native';
 import { Title, Button, TextInput, Text } from 'react-native-paper';
 import Svg, {
@@ -514,13 +515,52 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
   };
 
   const handleSelectCamera = async () => {
-    const response = await launchCamera({
-      mediaType: 'photo',
-      quality: 1,
-    });
-    if (response.assets && response.assets.length > 0 && response.assets[0].uri) {
-      setImageUri(response.assets[0].uri);
-      resetEditor();
+    if (Platform.OS === 'android') {
+      try {
+        const hasPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
+        if (!hasPermission) {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+            {
+              title: 'Camera Permission',
+              message: 'Flarelap needs access to your camera to take photos.',
+              buttonNeutral: 'Ask Me Later',
+              buttonNegative: 'Cancel',
+              buttonPositive: 'OK',
+            }
+          );
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn(err);
+        return;
+      }
+    }
+
+    try {
+      const response = await launchCamera({
+        mediaType: 'photo',
+        quality: 1,
+      });
+
+      if (response.didCancel) {
+        return;
+      }
+
+      if (response.errorCode) {
+        Alert.alert('Camera Error', response.errorMessage || 'Failed to open camera');
+        return;
+      }
+
+      if (response.assets && response.assets.length > 0 && response.assets[0].uri) {
+        setImageUri(response.assets[0].uri);
+        resetEditor();
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'An error occurred while launching camera');
     }
   };
 
@@ -676,6 +716,69 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
     commitHistory({ overlays: updated });
   };
 
+  // --- Helpers: save and share image file ---
+  const saveImageToDevice = async (localUri: string) => {
+    try {
+      const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+      if (!RNFS) throw new Error('RNFS not available');
+      const ts = Date.now();
+      const filename = `flarelap_photo_${ts}.jpg`;
+      let destPath = '';
+      if (Platform.OS === 'android') {
+        destPath = `${RNFS.DownloadDirectoryPath}/${filename}`;
+      } else {
+        destPath = `${RNFS.DocumentDirectoryPath}/${filename}`;
+      }
+
+      if (localUri.startsWith('file://')) {
+        const src = localUri.replace('file://', '');
+        await RNFS.copyFile(src, destPath);
+      } else if (localUri.startsWith('data:')) {
+        const base64 = localUri.split(',')[1];
+        await RNFS.writeFile(destPath, base64, 'base64');
+      } else {
+        // fallback: try copying by path (may fail for content://)
+        try { await RNFS.copyFile(localUri, destPath); } catch (e) { throw e; }
+      }
+
+      try { if (Platform.OS === 'android' && RNFS.scanFile) { await RNFS.scanFile(destPath); } } catch (e) {}
+      Alert.alert('Saved', `Image saved to ${Platform.OS === 'android' ? 'Downloads' : 'Files'} (${filename})`);
+      return true;
+    } catch (err) {
+      console.warn('saveImageToDevice failed', err);
+      // fallback to share
+      try {
+        await Share.share(Platform.OS === 'ios' ? { url: localUri } : { message: 'Check out my edited photo', url: localUri });
+      } catch (e) {
+        Alert.alert('Save failed', 'Could not save or share the image.');
+      }
+      return false;
+    }
+  };
+
+  const shareImageFile = async (localUri: string) => {
+    try {
+      const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+      let shareUrl = localUri;
+
+      if (localUri.startsWith('data:')) {
+        if (RNFS) {
+          const ts = Date.now();
+          const tmp = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
+          const filePath = `${tmp}/flarelap_share_${ts}.jpg`;
+          const base64 = localUri.split(',')[1];
+          await RNFS.writeFile(filePath, base64, 'base64');
+          shareUrl = `file://${filePath}`;
+        }
+      }
+
+      await Share.share(Platform.OS === 'ios' ? { url: shareUrl } : { message: 'Check out my edited photo', url: shareUrl });
+    } catch (err) {
+      console.warn('shareImageFile failed', err);
+      Alert.alert('Share Failed', 'Failed to share the image.');
+    }
+  };
+
   // --- Export and Save ---
   const handleExportPhoto = async () => {
     if (!imageUri) {
@@ -697,20 +800,8 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
           'Photo Export Ready!',
           'Your edited photo is compiled natively. What would you like to do?',
           [
-            {
-              text: 'Share / Save to Album',
-              onPress: async () => {
-                try {
-                  await Share.share(
-                    Platform.OS === 'ios'
-                      ? { url: uri }
-                      : { message: 'Check out my edited photo from Flarelap!', url: uri }
-                  );
-                } catch (e) {
-                  Alert.alert('Share Failed', 'Failed to open share dialog.');
-                }
-              },
-            },
+            { text: 'Download', onPress: async () => { await saveImageToDevice(uri); } },
+            { text: 'Share', onPress: async () => { await shareImageFile(uri); } },
             { text: 'Cancel', style: 'cancel' },
           ]
         );
@@ -1010,12 +1101,22 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                       style={styles.actionButton}
                       onPress={handleSelectGallery}
                     >
-                      Swap Image
+                      Gallery
+                    </Button>
+                    <Button
+                      mode="contained"
+                      buttonColor="#1E293B"
+                      textColor="#ffffff"
+                      icon={() => <CameraIcon size={16} color="#fff" />}
+                      style={styles.actionButtonCamera}
+                      onPress={handleSelectCamera}
+                    >
+                      Camera
                     </Button>
                     <Button
                       mode="outlined"
                       textColor="#F8FAFC"
-                      style={[styles.actionButton, { borderColor: '#475569' }]}
+                      style={styles.actionButtonReset}
                       onPress={resetEditor}
                     >
                       Reset All
@@ -1510,6 +1611,8 @@ const styles = StyleSheet.create({
   panelTitle: { color: '#94A3B8', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', marginBottom: 8, paddingHorizontal: 6 },
   rowActions: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 4 },
   actionButton: { marginHorizontal: 6, flex: 1 },
+  actionButtonCamera: { marginHorizontal: 6, flex: 1, borderWidth: 1, borderColor: '#334155' },
+  actionButtonReset: { marginHorizontal: 6, flex: 1, borderColor: '#475569' },
 
   // Filters scroll
   filtersScroll: { paddingVertical: 4 },

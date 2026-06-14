@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React from 'react';
-import { StyleSheet, useColorScheme } from 'react-native';
+import { StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SplashScreen from './src/screens/SplashScreen';
@@ -24,8 +24,6 @@ import PromotionScreen from './src/screens/PromotionScreen';
 const Stack = createNativeStackNavigator();
 
 function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
   const theme = {
     ...DefaultTheme,
     colors: {
@@ -38,6 +36,8 @@ function App(): React.JSX.Element {
 
   return (
     <PaperProvider theme={theme}>
+  {/* Ensure status bar is visible on non-splash screens by default */}
+      <StatusBar barStyle="light-content" hidden={false} />
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
           <Stack.Screen name="Splash" component={SplashScreen} />
@@ -62,11 +62,6 @@ function App(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000', // Match dark mode
-  },
-});
+// styles intentionally omitted (not used here)
 
 export default App;

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, StyleSheet, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import Logo from '../components/Logo';
 import { Text, TextInput, Button, Title } from 'react-native-paper';
 import { setAuthToken } from '../services/api.service';
@@ -10,6 +10,7 @@ import { THEME_COLORS } from '../constants';
 function LoginScreen({navigation}: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const passwordRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,49 +38,58 @@ function LoginScreen({navigation}: any) {
   };
 
   return (
-    <View
-          style={styles.container}
-        >
-      <Logo size={150} />
-      <Title style={styles.title} >Welcome Back</Title>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      <TextInput
-        mode="outlined"
-        label="Email"
-        style={[styles.input, styles.roundInput]}
-        outlineStyle={styles.roundInput}
-        dense
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-      />
-      <TextInput
-        mode="outlined"
-        label="Password"
-        style={[styles.input, styles.roundInput]}
-        outlineStyle={styles.roundInput}
-        dense
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Logo size={150} />
+        <Title style={styles.title}>Welcome Back</Title>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <TextInput
+          mode="outlined"
+          label="Email"
+          style={[styles.input, styles.roundInput]}
+          outlineStyle={styles.roundInput}
+          dense
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus && passwordRef.current.focus()}
+        />
+        <TextInput
+          ref={passwordRef}
+          mode="outlined"
+          label="Password"
+          style={[styles.input, styles.roundInput]}
+          outlineStyle={styles.roundInput}
+          dense
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
+        />
 
-      <Button mode="contained" onPress={handleLogin} style={styles.button} loading={loading} disabled={loading}>
-        Login
-      </Button>
-
-      <Button  onPress={() => navigation.navigate('ForgotPassword')} compact>
-        Forgot password?
-      </Button>
-
-      <View style={styles.row}>
-        <Text>Don't have an account?</Text>
-        <Button onPress={() => navigation.navigate('Signup')} compact>
-          Sign up
+        <Button mode="contained" onPress={handleLogin} style={styles.button} loading={loading} disabled={loading}>
+          Login
         </Button>
-      </View>
-    </View>
+
+        <Button onPress={() => navigation.navigate('ForgotPassword')} compact>
+          Forgot password?
+        </Button>
+
+        <View style={styles.row}>
+          <Text>Don't have an account?</Text>
+          <Button onPress={() => navigation.navigate('Signup')} compact>
+            Sign up
+          </Button>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

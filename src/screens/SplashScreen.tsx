@@ -52,7 +52,8 @@ function SplashScreen({navigation}: any) {
       end={{ x: 1, y: 1 }}
       style={styles.container}
     >
-      <StatusBar hidden />
+      {/* Hide status bar only on splash */}
+      <StatusBar hidden={true} />
       <Logo size={220} />
     </LinearGradient>
   );

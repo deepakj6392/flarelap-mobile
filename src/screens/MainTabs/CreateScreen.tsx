@@ -95,7 +95,7 @@ function tileColor(index: number) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 40, backgroundColor: '#f7fafc' },
+  scroll: { padding: 20, paddingBottom: 40, backgroundColor: '#ffffffff' },
   header: { alignItems: 'center', marginTop: 6, marginBottom: 12 },
   title: { fontSize: 22, fontWeight: '800', textAlign: 'center', color: '#df103f' },
   subtitle: { textAlign: 'center', color: '#556070', marginTop: 8, maxWidth: 340 },
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   searchInput: { fontSize: 16 },
   grid: { marginTop: 20, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   tile: { width: '30%', backgroundColor: '#fff', borderRadius: 16, padding: 12, alignItems: 'center', marginBottom: 16, elevation: 3 },
-  tileIcon: { width: 56, height: 56, borderRadius: 12, marginBottom: 8 },
+  tileIcon: { width: 90, height: 90, borderRadius: 12, padding: 15, marginBottom: 8 },
   tileLabel: { fontSize: 12, textAlign: 'center', color: '#334155' },
   trendingRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
   trendingTitle: { fontSize: 18, fontWeight: '800' },

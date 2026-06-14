@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  Text as RNText,
   TouchableOpacity,
   Dimensions,
   SafeAreaView,
@@ -15,7 +14,7 @@ import {
   Image as RNImage,
   PanResponder,
 } from 'react-native';
-import { Title, Button, Text } from 'react-native-paper';
+import { Title, Text } from 'react-native-paper';
 import Svg, { Path, Circle } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot, { captureRef } from 'react-native-view-shot';
@@ -293,20 +292,27 @@ export default function QRCodeGenerator({ navigation }: { route?: any; navigatio
         quality: 1.0,
       });
 
+      // Present explicit Download and Share actions
       Alert.alert(
         'QR Code Exported!',
-        'Your custom QR code has been compiled. How would you like to share it?',
+        'Your custom QR code has been compiled. What would you like to do?',
         [
           {
-            text: 'Share / Save',
+            text: 'Download',
             onPress: async () => {
               try {
-                await Share.share(
-                  Platform.OS === 'ios'
-                    ? { url: uri }
-                    : { message: 'Scan my QR code made in Flarelap!', url: uri }
-                );
-              } catch (e) {
+                await saveImageToDevice(uri);
+              } catch (e: any) {
+                Alert.alert('Save Failed', e?.message || 'Could not save image.');
+              }
+            },
+          },
+          {
+            text: 'Share',
+            onPress: async () => {
+              try {
+                await shareImageFile(uri);
+              } catch {
                 Alert.alert('Share Failed', 'Failed to trigger share system.');
               }
             },
@@ -316,6 +322,157 @@ export default function QRCodeGenerator({ navigation }: { route?: any; navigatio
       );
     } catch (err: any) {
       Alert.alert('Export Failed', err.message || 'Could not compile QR code canvas.');
+    }
+  };
+
+  // Attempt to save an image URI to the user's device.
+  // We intentionally avoid using @react-native-community/cameraroll here to prevent hard dependency issues.
+  // Instead we open the native share sheet so users can save the image (Save Image / Save to Files) from there.
+  const saveImageToDevice = async (localUri: string) => {
+    // Try to use react-native-fs if it's installed so we can write to a visible folder (Downloads on Android).
+    // If RNFS isn't available, fall back to the share sheet.
+    const tryRNFS = () => {
+      try {
+        // @ts-ignore - optional dependency
+        return require('react-native-fs');
+      } catch {
+        return null;
+      }
+    };
+
+    const RNFS = tryRNFS();
+
+    // normalize uri helpers
+    const stripFilePrefix = (u: string) => (u.startsWith('file://') ? u.replace('file://', '') : u);
+
+    try {
+      if (RNFS) {
+        // If the captured URI is a data URI (base64), write it out directly.
+        if (localUri.startsWith('data:')) {
+          // data:[<mediatype>][;base64],<data>
+          const parts = localUri.split(',');
+          const meta = parts[0] || '';
+          const isBase64 = meta.includes(';base64');
+          const data = parts[1] || '';
+          const filename = `flarelap_qr_${Date.now()}.png`;
+
+          if (Platform.OS === 'android') {
+            const destPath = `${RNFS.DownloadDirectoryPath}/${filename}`;
+            if (isBase64) {
+              await RNFS.writeFile(destPath, data, 'base64');
+            } else {
+              await RNFS.writeFile(destPath, data, 'utf8');
+            }
+            // Try to scan so the image shows in Downloads/Gallery apps
+            if (RNFS.scanFile) {
+              try { RNFS.scanFile([{ path: destPath, mime: 'image/png' }]); } catch { /* ignore */ }
+            }
+            Alert.alert('Saved', `Image saved to Downloads: ${destPath}`);
+            return;
+          } else {
+            const destPath = `${RNFS.DocumentDirectoryPath}/${filename}`;
+            if (isBase64) {
+              await RNFS.writeFile(destPath, data, 'base64');
+            } else {
+              await RNFS.writeFile(destPath, data, 'utf8');
+            }
+            // On iOS present share sheet so user can Save to Files or save image
+            await Share.share({ url: `file://${destPath}` }, { subject: 'QR Code from Flarelap' });
+            Alert.alert('Saved', 'Image written to app documents. Use the share sheet to move it to Files or Photos.');
+            return;
+          }
+        }
+
+        // Otherwise localUri should be a file:// path returned by view-shot
+        const srcPath = stripFilePrefix(localUri);
+        const filename = `flarelap_qr_${Date.now()}.png`;
+
+        if (Platform.OS === 'android') {
+          const destPath = `${RNFS.DownloadDirectoryPath}/${filename}`;
+          await RNFS.copyFile(srcPath, destPath);
+          if (RNFS.scanFile) {
+            try { RNFS.scanFile([{ path: destPath, mime: 'image/png' }]); } catch { /* ignore */ }
+          }
+          Alert.alert('Saved', `Image saved to Downloads: ${destPath}`);
+          return;
+        } else {
+          const destPath = `${RNFS.DocumentDirectoryPath}/${filename}`;
+          await RNFS.copyFile(srcPath, destPath);
+          // Present share so user can export to Files or Photos
+          await Share.share({ url: `file://${destPath}` }, { subject: 'QR Code from Flarelap' });
+          Alert.alert('Saved', 'Image written to app documents. Use the share sheet to move it to Files or Photos.');
+          return;
+        }
+      }
+
+      // If RNFS is not present, fallback to share sheet so user can Save Image / Save to Files
+      if (Platform.OS === 'ios') {
+        await Share.share({ url: localUri }, { subject: 'QR Code from Flarelap' });
+      } else {
+        await Share.share({ message: 'Scan my QR code made in Flarelap!', url: localUri });
+      }
+
+      Alert.alert('Share opened', 'Use the share sheet to save the image (e.g. "Save Image" or "Save to Files").');
+    } catch (err: any) {
+      console.warn('saveImageToDevice failed', err);
+      Alert.alert(
+        'Save Failed',
+        'Could not save the image automatically. You can still share it using the system share sheet.'
+      );
+    }
+  };
+
+  // Ensure we share the actual image file. If the captured URI is a data URI, write it to a temp file (RNFS) first.
+  const shareImageFile = async (localUri: string) => {
+    const tryRNFS = () => {
+      try {
+        // @ts-ignore
+        return require('react-native-fs');
+      } catch {
+        return null;
+      }
+    };
+
+    const RNFS = tryRNFS();
+
+    const stripFilePrefix = (u: string) => (u.startsWith('file://') ? u : (u.startsWith('/') ? `file://${u}` : u));
+
+    try {
+      let shareUri = localUri;
+
+      if (localUri.startsWith('data:')) {
+        // need to write data URI to a temporary file to share
+        const parts = localUri.split(',');
+        const meta = parts[0] || '';
+        const isBase64 = meta.includes(';base64');
+        const data = parts[1] || '';
+        const filename = `flarelap_qr_share_${Date.now()}.png`;
+
+        if (RNFS) {
+          const tmpPath = Platform.OS === 'android' ? `${RNFS.TemporaryDirectoryPath}/${filename}` : `${RNFS.TemporaryDirectoryPath || RNFS.DocumentDirectoryPath}/${filename}`;
+          if (isBase64) {
+            await RNFS.writeFile(tmpPath, data, 'base64');
+          } else {
+            await RNFS.writeFile(tmpPath, data, 'utf8');
+          }
+          shareUri = `file://${tmpPath}`;
+        } else {
+          // If RNFS isn't available, fall back to share sheet with data URI (may not work on Android)
+          shareUri = localUri;
+        }
+      } else {
+        // ensure file:// prefix when appropriate
+        shareUri = stripFilePrefix(localUri);
+      }
+
+      if (Platform.OS === 'ios') {
+        await Share.share({ url: shareUri }, { subject: 'QR Code from Flarelap' });
+      } else {
+        await Share.share({ message: 'Scan my QR code made in Flarelap!', url: shareUri });
+      }
+    } catch (err) {
+      console.warn('shareImageFile failed', err);
+      Alert.alert('Share Failed', 'Could not share the QR image file.');
     }
   };
 

@@ -17,6 +17,7 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
   Modal,
   ActivityIndicator,
   TextInput as RNTextInput,
@@ -26,6 +27,7 @@ import Video from 'react-native-video';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import api from '../../services/api.service';
+import { VIDEOS_TEMPLATES } from '../../constants';
 
 import CustomizeVideoIcon from '../../assets/icons/social/thumbnail_customize_video.svg';
 import InstagramStoryIcon from '../../assets/icons/social/thumbnail_instagram_story.svg';
@@ -348,6 +350,9 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [volume, setVolume]             = useState(1.0);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError]     = useState<string | null>(null);
+  // rendering-mode toggle to work around platform surface issues (Android SurfaceView vs TextureView)
+  const [useTexture, setUseTexture] = useState<boolean>(Platform.OS === 'android');
+  const [videoKeySeed, setVideoKeySeed] = useState<number>(0);
 
   // Overlays
   const [overlays, setOverlays]           = useState<Overlay[]>([]);
@@ -357,6 +362,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   // Social modal state (open when incoming category is Social Media)
   const [showSocialModal, setShowSocialModal] = useState(false);
   const [videoSubCategory, setVideoSubCategory] = useState<string | null>(null);
+  // Templates modal
+  const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
 
   // Music
   const [selectedMusic, setSelectedMusic] = useState<string>('none');
@@ -407,15 +414,24 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
 
   // ── video picker ──
   const pickVideo = async () => {
-    const res = await launchImageLibrary({ mediaType: 'video', videoQuality: 'high' });
-    if (res.assets?.[0]?.uri) {
-      setVideoUri(res.assets[0].uri);
-      setCurrentTime(0);
-      setPaused(true);
-      setVideoError(null);
-      setOverlays([]);
-      setHistory([]);
-      setHistoryIdx(-1);
+    try {
+      const res = await launchImageLibrary({ mediaType: 'video', videoQuality: 'high' });
+      if (res.didCancel) return;
+      if (res.errorCode) { Alert.alert('Picker Error', res.errorMessage || res.errorCode); return; }
+      const uri = res.assets?.[0]?.uri;
+      if (uri) {
+        setVideoUri(uri);
+        setCurrentTime(0);
+        setPaused(false);
+        setVideoError(null);
+        setOverlays([]);
+        setHistory([]);
+        setHistoryIdx(-1);
+        setVideoKeySeed(s => s + 1);
+        setTimeout(() => { try { videoRef.current?.seek(0.001); } catch { } }, 140);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Unable to pick video.');
     }
   };
 
@@ -424,33 +440,65 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   }, []);
 
   const recordVideo = async () => {
-    const res = await launchCamera({ mediaType: 'video', videoQuality: 'high', durationLimit: 300 });
-    if (res.assets?.[0]?.uri) {
-      setVideoUri(res.assets[0].uri);
-      setCurrentTime(0);
-      setPaused(true);
-      setVideoError(null);
-      setOverlays([]);
-      setHistory([]);
-      setHistoryIdx(-1);
+    try {
+      const res = await launchCamera({ mediaType: 'video', videoQuality: 'high', durationLimit: 300, saveToPhotos: true });
+      if (res.didCancel) return;
+      if (res.errorCode) { Alert.alert('Camera Error', res.errorMessage || res.errorCode); return; }
+      const uri = res.assets?.[0]?.uri;
+      if (uri) {
+        setVideoUri(uri);
+        setCurrentTime(0);
+        setPaused(false);
+        setVideoError(null);
+        setOverlays([]);
+        setHistory([]);
+        setHistoryIdx(-1);
+        setVideoKeySeed(s => s + 1);
+        setTimeout(() => { try { videoRef.current?.seek(0.001); } catch { } }, 140);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Unable to record video.');
     }
+  };
+
+  const selectTemplate = (t) => {
+    if (!t?.videoURL) return;
+    setVideoUri(t.videoURL);
+    setCurrentTime(0);
+    setPaused(false); // ← start playing so first frame renders
+    setVideoError(null);
+    setOverlays([]);
+    setHistory([]);
+    setHistoryIdx(-1);
+    setTemplatesModalVisible(false);
+    setVideoKeySeed(s => s + 1);
+    setTimeout(() => {
+      try { videoRef.current?.seek(0); } catch {}
+    }, 300); // ← increased delay for template URLs
   };
 
   // ── image overlay picker ──
   const pickImageOverlay = async () => {
-    const res = await launchImageLibrary({ mediaType: 'photo', quality: 1 });
-    if (res.assets?.[0]?.uri) {
-      const id = `img_${nextId.current++}`;
-      const item: Overlay = {
-        id, type: 'image',
-        x: PREVIEW_W / 2 - 60, y: PREVIEW_H / 2 - 60,
-        width: 120, height: 120, rotation: 0,
-        uri: res.assets[0].uri, borderRadius: 0, opacity: 1,
-      };
-      const updated = [...overlays, item];
-      setOverlays(updated);
-      setSelectedOverlay(id);
-      commitHistory({ overlays: updated });
+    try {
+      const res = await launchImageLibrary({ mediaType: 'photo', quality: 1 });
+      if (res.didCancel) return;
+      if (res.errorCode) { Alert.alert('Picker Error', res.errorMessage || res.errorCode); return; }
+      const uri = res.assets?.[0]?.uri;
+      if (uri) {
+        const id = `img_${nextId.current++}`;
+        const item: Overlay = {
+          id, type: 'image',
+          x: PREVIEW_W / 2 - 60, y: PREVIEW_H / 2 - 60,
+          width: 120, height: 120, rotation: 0,
+          uri, borderRadius: 0, opacity: 1,
+        };
+        const updated = [...overlays, item];
+        setOverlays(updated);
+        setSelectedOverlay(id);
+        commitHistory({ overlays: updated });
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Unable to pick image.');
     }
   };
 
@@ -556,7 +604,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-
+        
         {/* ── Header ── */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.hBtn}>
@@ -596,20 +644,58 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
             <View style={[styles.videoWrapper, { width: PREVIEW_W, height: PREVIEW_H }]}>
               {/* Native video player */}
               <Video
+                key={`${videoUri ?? 'video-player'}_${videoKeySeed}`}
                 ref={videoRef}
                 source={{ uri: videoUri }}
-                style={styles.videoFill}
+                style={[styles.videoFill, { backgroundColor: '#000' }]}
                 paused={paused}
                 muted={muted}
                 volume={volume}
                 rate={playbackRate}
+                useTextureView={Platform.OS === 'android' ? useTexture : undefined}
                 resizeMode="contain"
                 repeat={false}
-                onLoad={(data: any) => { setDuration(data.duration); setVideoLoading(false); }}
+                controls={true}
+                onLoad={(data: any) => {
+                  console.log('Video onLoad', { duration: data.duration });
+                  setDuration(data.duration);
+                  setVideoLoading(false);
+                  // nudge a tiny seek to force first-frame decode on some devices
+                  try {
+                    setTimeout(() => {
+                      if (videoRef.current?.seek) {
+                        const t = Math.max(0, currentTime || 0);
+                        console.log('Nudging seek to', t + 0.001);
+                        videoRef.current.seek(t + 0.001);
+                      }
+                    }, 150);
+                  } catch (e) { console.warn('Seek nudge failed', e); }
+                }}
+                onReadyForDisplay={() => {
+                  setVideoLoading(false);
+                  setVideoError(null);
+                  // Force first frame render on Android
+                  if (Platform.OS === 'android') {
+                    setTimeout(() => {
+                      try { videoRef.current?.seek(0.001); } catch {}
+                    }, 100);
+                  }
+                }}
                 onProgress={(data: any) => setCurrentTime(data.currentTime)}
                 onEnd={() => { setPaused(true); setCurrentTime(0); }}
-                onLoadStart={() => setVideoLoading(true)}
-                onError={(e: any) => { setVideoError(e?.error?.localizedDescription || 'Playback error'); setVideoLoading(false); }}
+                onLoadStart={() => { console.log('Video onLoadStart'); setVideoLoading(true); }}
+                onBuffer={(b: any) => { console.log('Video onBuffer', b); setVideoLoading(!!b?.isBuffering); }}
+                onError={(e: any) => {
+                  console.warn('Video playback error', e);
+                  setVideoError(e?.error?.localizedDescription || (e?.error && JSON.stringify(e.error)) || JSON.stringify(e) || 'Playback error');
+                  setVideoLoading(false);
+                  // fallback: toggle texture mode on error to try alternate rendering path and force remount
+                  if (Platform.OS === 'android') {
+                    setUseTexture(prev => !prev);
+                    setVideoKeySeed(s => s + 1);
+                    console.log('Toggling useTexture to', !useTexture, 'and remounting video');
+                  }
+                }}
               />
 
               {/* Overlay dim for filter badge */}
@@ -619,10 +705,11 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                 </View>
               )}
 
-              {/* Deselect tap target */}
+              {/* Deselect tap target — only intercept touches when overlays exist, otherwise let touches reach player */}
               <TouchableOpacity
                 activeOpacity={1}
                 style={StyleSheet.absoluteFillObject}
+                pointerEvents={overlays.length > 0 ? 'auto' : 'box-none'}
                 onPress={() => setSelectedOverlay(null)}
               />
               {/* Overlays */}
@@ -651,13 +738,35 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   <Text style={styles.errorText}>⚠ {videoError}</Text>
                 </View>
               )}
+              {/* Debug info (temporary) */}
+              <View style={styles.debugPanel} pointerEvents="none">
+                <Text style={styles.debugText} numberOfLines={2}>URI: {videoUri ?? '—'}</Text>
+                <Text style={styles.debugText}>Loading: {videoLoading ? 'yes' : 'no'}  Error: {videoError ? 'yes' : 'no'}</Text>
+                <Text style={styles.debugText}>Duration: {duration ? formatTime(duration) : '—'}  Texture: {Platform.OS === 'android' ? (useTexture ? 'ON' : 'OFF') : 'n/a'}</Text>
+              </View>
             </View>
           ) : (
             /* Empty state */
-            <View style={[styles.emptyCanvas, { width: PREVIEW_W, height: PREVIEW_H }]}>
+            <View style={[styles.emptyCanvas, { width: PREVIEW_W, height: PREVIEW_H }]}> 
               <Icon.Video size={48} color="#334155" />
               <Title style={styles.emptyTitle}>No Video Selected</Title>
-              <Text style={styles.emptySub}>Pick from gallery or record with camera to start editing</Text>
+              <Text style={styles.emptySub}>Pick from gallery, record with camera, or use a template to start editing</Text>
+
+              {/* Inline templates strip so users can pick templates without opening modal */}
+              <View style={styles.templatesRow}>
+                <Text style={styles.templateHeading}>Templates</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 6 }}>
+                  {VIDEOS_TEMPLATES.map(t => (
+                    <TouchableOpacity key={t.id} style={styles.templateCard} onPress={() => selectTemplate(t)}>
+                      <View style={styles.templateThumb}>
+                        <Icon.Play size={20} color="#fff" />
+                      </View>
+                      <Text style={styles.templateTitle} numberOfLines={1}>{t.title}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
               <View style={styles.emptyActions}>
                 <TouchableOpacity style={styles.emptyBtn} onPress={pickVideo}>
                   <Icon.Video size={18} color="#fff" />
@@ -699,12 +808,28 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                 <Text style={styles.ctrlLabel}>-10s</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
+                  <TouchableOpacity
                 style={styles.playBtn}
-                onPress={() => setPaused(p => !p)}
+                onPress={() => {
+                  setPaused(p => {
+                    const next = !p;
+                    // if we are about to play, nudge a tiny seek after unpause
+                    if (!next) {
+                      setTimeout(() => { try { videoRef.current?.seek((currentTime || 0) + 0.001); } catch {} }, 80);
+                    }
+                    return next;
+                  });
+                }}
               >
                 {paused ? <Icon.Play size={26} /> : <Icon.Pause size={26} />}
               </TouchableOpacity>
+
+              {/* Toggle rendering mode (helps diagnose Android blank frame issues) */}
+              {Platform.OS === 'android' && (
+                <TouchableOpacity style={styles.ctrlBtn} onPress={() => setUseTexture(u => !u)}>
+                  <Text style={{ color: useTexture ? '#df103f' : '#94A3B8', fontSize: 11, fontWeight: '700' }}>{useTexture ? 'Texture ON' : 'Texture OFF'}</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 onPress={() => { const t = Math.min(duration, currentTime + 10); setCurrentTime(t); videoRef.current?.seek(t); }}
@@ -740,6 +865,12 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                     <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 }]} onPress={recordVideo}>
                       <Icon.Camera size={18} color="#F8FAFC" />
                       <Text style={[styles.srcBtnLabel, { color: '#F8FAFC' }]}>Record</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{ marginTop: 10 }}>
+                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#0F172A' }]} onPress={() => setTemplatesModalVisible(true)}>
+                      <Icon.Video size={18} color="#fff" />
+                      <Text style={styles.srcBtnLabel}>Use Template</Text>
                     </TouchableOpacity>
                   </View>
                   <CustomSlider label="Volume" min={0} max={1} step={0.05} value={volume} onChange={setVolume} suffix="%" />
@@ -958,6 +1089,31 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         </View>
       </Modal>
 
+      {/* ── Templates Modal ── */}
+      <Modal visible={templatesModalVisible} animationType="slide" transparent onRequestClose={() => setTemplatesModalVisible(false)}>
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard}>
+            <Title style={styles.modalTitle}>Choose a video template</Title>
+            <ScrollView contentContainerStyle={styles.templatesGrid}>
+              {VIDEOS_TEMPLATES.map(t => (
+                <TouchableOpacity key={t.id} style={styles.templateGridItem} onPress={() => selectTemplate(t)}>
+                  <View style={styles.templateGridCard}>
+                    <View style={styles.templateGridThumb}>
+                      <Icon.Play size={20} color="#fff" />
+                    </View>
+                    <Text style={styles.templateGridTitle} numberOfLines={2}>{t.title}</Text>
+                    <Text style={styles.templateGridMeta}>{t.width} × {t.height}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <Button mode="contained" buttonColor="#df103f" onPress={() => setTemplatesModalVisible(false)} style={styles.modalBtn}>Close</Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Add Text Modal ── */}
       <Modal visible={textModalVisible} animationType="slide" transparent onRequestClose={() => setTextModalVisible(false)}>
         <View style={styles.modalBg}>
@@ -1023,7 +1179,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#060A12' },
+  safe: { flex: 1, backgroundColor: '#060A12', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0 },
   flex: { flex: 1 },
 
   // Header
@@ -1141,4 +1297,19 @@ const styles = StyleSheet.create({
   socialCardInner: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e6e9ef', height: 120, justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
   socialCardTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
   socialCardSize: { fontSize: 11, color: '#64748b', marginTop: 6 },
+  // Debug / templates
+  debugPanel: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.45)', padding: 8, borderRadius: 8 },
+  debugText: { color: '#94A3B8', fontSize: 11 },
+  templatesRow: { width: '100%', marginTop: 12 },
+  templateHeading: { color: '#64748B', fontSize: 11, fontWeight: '700', marginBottom: 6 },
+  templateCard: { width: 96, marginRight: 8, alignItems: 'center' },
+  templateThumb: { width: 88, height: 56, borderRadius: 8, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  templateTitle: { color: '#F8FAFC', fontSize: 12, fontWeight: '700', width: 88, textAlign: 'center' },
+  // Templates modal grid
+  templatesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 12 },
+  templateGridItem: { width: '48%' , padding: 6 },
+  templateGridCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e6e9ef', borderRadius: 10, padding: 10, alignItems: 'center' },
+  templateGridThumb: { width: '100%', height: 110, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  templateGridTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a', textAlign: 'center' },
+  templateGridMeta: { fontSize: 12, color: '#64748b', marginTop: 6 },
 });

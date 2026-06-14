@@ -8,3 +8,63 @@ export const THEME_COLORS = {
     disabled: '#f0f0f0',
     placeholder: '#aaa',
 };
+
+
+export const VIDEOS_TEMPLATES = [
+    {
+        id: 1,
+        title: "Social Media Promo",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_1.mp4",
+    },
+    {
+        id: 2,
+        title: "Product Showcase",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_2.mp4",
+    },
+    {
+        id: 3,
+        title: "Event Announcement",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_3.mp4",
+    },
+    {
+        id: 4,
+        title: "Brand Story",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_4.mp4",
+    },
+    {
+        id: 5,
+        title: "Tutorial Video",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_5.mp4",
+    },
+    {
+        id: 6,
+        title: "Customer Testimonial",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_6.mp4",   
+    },
+    {
+        id: 7,
+        title: "Seasonal Sale",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_7.mp4",
+    },
+    {
+        id: 8,
+        title: "Behind the Scenes",
+        width: 440,
+        height: 780,
+        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_8.mp4",
+    },
+]

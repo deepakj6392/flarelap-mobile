@@ -1,18 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, FlatList, Image } from 'react-native';
-import { Title, Paragraph, Card, Text, Menu, Button } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, FlatList, Image, TouchableOpacity } from 'react-native';
+import { Title, Paragraph, Card, Text } from 'react-native-paper';
 import { getAllTemplates } from '../../services/template.service';
 import { Template } from '../../../types/template';
+import { THEME_COLORS } from '../../constants';
 
 const CATEGORIES = ['All', 'Social Media', 'Business Ads', 'Card Maker', 'Promotion', 'Wallpaper', 'Logos & Sticker'];
 
 export default function HomeScreen() {
   const [active, setActive] = useState('All');
-  const [menuVisible, setMenuVisible] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
-
-  const openMenu = () => setMenuVisible(true);
-  const closeMenu = () => setMenuVisible(false);
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -32,25 +29,23 @@ export default function HomeScreen() {
         <Paragraph style={styles.subtitle}>Choose from hundreds of professional templates and customize them in seconds.</Paragraph>
       </View>
 
-      <View style={styles.menuWrap}>
-        <Menu
-          visible={menuVisible}
-          onDismiss={closeMenu}
-          anchor={
-            <Button mode="outlined" onPress={openMenu} style={styles.categoryBtn}>
-              {active}
-            </Button>
-          }
-        >
+      <View style={styles.chipsWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 6 }}>
           {CATEGORIES.map(cat => (
-            <Menu.Item key={cat} onPress={() => { setActive(cat); closeMenu(); }} title={cat} />
+            <TouchableOpacity
+              key={cat}
+              style={[styles.chipBtn, active === cat && styles.chipActive]}
+              onPress={() => setActive(cat)}
+            >
+              <Text style={[styles.chipText, active === cat && styles.chipTextActive]}>{cat}</Text>
+            </TouchableOpacity>
           ))}
-        </Menu>
+        </ScrollView>
       </View>
 
       <View style={styles.sectionHeader}>
         <Title style={styles.sectionTitle}>All Templates</Title>
-        <View style={styles.countBadge}><Text style={styles.countText}>158</Text></View>
+        <View style={styles.countBadge}><Text style={styles.countText}>{templates.length}</Text></View>
       </View>
 
       <FlatList
@@ -81,11 +76,11 @@ const styles = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 80, backgroundColor: '#fff' },
   header: { alignItems: 'center', marginBottom: 18 },
   title: { fontSize: 26, fontWeight: '800', textAlign: 'center' },
-  highlight: { color: '#7b2ab6' },
+  highlight: { color: THEME_COLORS.primary },
   subtitle: { textAlign: 'center', color: '#6b7280', marginTop: 8, maxWidth: 360 },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 18 },
   chipBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#fff', margin: 6, elevation: 2 },
-  chipActive: { backgroundColor: '#df103f' },
+  chipActive: { backgroundColor: THEME_COLORS.primary, fontWeight: '700' },
   chipText: { color: '#374151', fontWeight: '600' },
   chipTextActive: { color: '#fff' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 22, marginBottom: 12 },
