@@ -4,6 +4,7 @@ import { Title, Paragraph, Card, Text } from 'react-native-paper';
 import { getAllTemplates } from '../../services/template.service';
 import { Template } from '../../../types/template';
 import { THEME_COLORS } from '../../constants';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const CATEGORIES = ['All', 'Social Media', 'Business Ads', 'Card Maker', 'Promotion', 'Wallpaper', 'Logos & Sticker'];
 
@@ -21,6 +22,7 @@ export default function HomeScreen() {
   }, []);
 
   return (
+    <SafeAreaView>
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
         <Title style={styles.title}>Start with a
@@ -69,6 +71,7 @@ export default function HomeScreen() {
         )}
       />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 

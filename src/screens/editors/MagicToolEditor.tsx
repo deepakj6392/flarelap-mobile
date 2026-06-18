@@ -24,7 +24,6 @@ import {
   Image as RNImage,
   TouchableOpacity,
   Dimensions,
-  SafeAreaView,
   ActivityIndicator,
   Modal,
   Share,
@@ -37,6 +36,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import { launchImageLibrary } from 'react-native-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { PIXABAY_API_KEY } from '../../constants/config';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // ─── Canvas ────────────────────────────────────────────────────────────────────
 const { width: screenWidth } = Dimensions.get('window');

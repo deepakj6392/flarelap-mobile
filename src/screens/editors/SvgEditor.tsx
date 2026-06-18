@@ -9,7 +9,6 @@ import {
   Image as RNImage,
   TouchableOpacity,
   Dimensions,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   Image,
@@ -19,112 +18,26 @@ import { Title, Button, TextInput, Text, ActivityIndicator, Portal, Modal } from
 import Svg, { SvgXml, Rect, Circle, Polygon, Line, Path } from 'react-native-svg';
 import { Template } from '../../../types/template';
 import { getAllTemplates } from '../../services/template.service';
+import {
+  UndoIcon,
+  RedoIcon,
+  PlusIcon,
+  TextIcon,
+  ShapeIcon,
+  ImageIcon,
+  LayersIcon,
+  CanvasIcon,
+  TemplateIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  CloseIcon,
+  DownloadIcon,
+  RotateIcon,
+  TrashIcon,
+  BoldIcon,
+  ItalicIcon
+} from '../../components/icons-svg';
 
-// Custom inline SVG icons for dependency-free rendering
-const UndoIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-  </Svg>
-);
-
-const RedoIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M21 7v6h-6M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
-  </Svg>
-);
-
-const PlusIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M12 5v14M5 12h14" />
-  </Svg>
-);
-
-const TextIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M4 7V4h16v3M9 20h6M12 4v16" />
-  </Svg>
-);
-
-const ShapeIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M12 2L2 22h20L12 2z" />
-  </Svg>
-);
-
-const ImageIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" />
-    <Circle cx="16" cy="5" r="3" />
-    <Path d="M21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-  </Svg>
-);
-
-const LayersIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-  </Svg>
-);
-
-const CanvasIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M3 3h18v18H3V3zm18 6H3M9 21V3" />
-  </Svg>
-);
-
-const TemplateIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-    <Path d="M3 9h18M9 21V9" />
-  </Svg>
-);
-
-const ChevronUpIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M18 15l-6-6-6 6" />
-  </Svg>
-);
-
-const ChevronDownIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M6 9l6 6 6-6" />
-  </Svg>
-);
-
-const CloseIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M18 6L6 18M6 6l12 12" />
-  </Svg>
-);
-
-const DownloadIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-  </Svg>
-);
-
-const RotateIcon = ({ size = 20, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-  </Svg>
-);
-
-const TrashIcon = ({ size = 20, color = '#ef4444' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />
-  </Svg>
-);
-
-const BoldIcon = ({ size = 18, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6zM6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-  </Svg>
-);
-
-const ItalicIcon = ({ size = 18, color = '#334155' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M19 4h-9M14 20H5M15 4L9 20" />
-  </Svg>
-);
 
 // Get Responsive Canvas dimensions
 const { width: screenWidth } = Dimensions.get('window');
@@ -151,15 +64,16 @@ import XCoverIcon from '../../assets/icons/social/thumbnail_x_post_landscape_16_
 import YouTubeThumbIcon from '../../assets/icons/social/thumbnail_youtube_intro.svg';
 import LinkedInBannerIcon from '../../assets/icons/social/thumbnail_linkedin_banner_landscape.svg';
 import PinterestPinIcon from '../../assets/icons/social/thumbnail_pinterest_pin_portrait.svg';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SOCIAL_SUBCATS = [
-  { id: 'instagram_post', title: 'Instagram Post', icon:<InstagramPostIcon width={150} height={150} />, size: '1080 x 1080' },
-  { id: 'facebook_cover', title: 'Facebook Cover', icon:<FacebookCoverIcon width={150} height={150} />, size: '851 x 315' },
-  { id: 'facebook_post', title: 'Facebook Post', icon:<FacebookPostIcon width={150} height={150} />, size: '1200 x 630' },
-  { id: 'x_cover', title: 'X Cover', icon:<XCoverIcon width={150} height={150} />, size: '900 x 300' },
-  { id: 'youtube_thumb', title: 'YouTube Thumbnail', icon:<YouTubeThumbIcon width={150} height={150} />, size: '1280 x 720' },
-  { id: 'linkedin_banner', title: 'LinkedIn Banner', icon:<LinkedInBannerIcon width={150} height={150} />, size: '1584 x 396' },
-  { id: 'pinterest_pin', title: 'Pinterest Pin', icon:<PinterestPinIcon width={150} height={150} />, size: '1000 x 1500' },
+  { id: 'instagram_post', title: 'Instagram Post', icon: <InstagramPostIcon width={150} height={150} />, size: '1080 x 1080' },
+  { id: 'facebook_cover', title: 'Facebook Cover', icon: <FacebookCoverIcon width={150} height={150} />, size: '851 x 315' },
+  { id: 'facebook_post', title: 'Facebook Post', icon: <FacebookPostIcon width={150} height={150} />, size: '1200 x 630' },
+  { id: 'x_cover', title: 'X Cover', icon: <XCoverIcon width={150} height={150} />, size: '900 x 300' },
+  { id: 'youtube_thumb', title: 'YouTube Thumbnail', icon: <YouTubeThumbIcon width={150} height={150} />, size: '1280 x 720' },
+  { id: 'linkedin_banner', title: 'LinkedIn Banner', icon: <LinkedInBannerIcon width={150} height={150} />, size: '1584 x 396' },
+  { id: 'pinterest_pin', title: 'Pinterest Pin', icon: <PinterestPinIcon width={150} height={150} />, size: '1000 x 1500' },
 ];
 
 // Types
@@ -520,7 +434,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     itemsRef.current = items;
   }, [items]);
 
-  
+
   // derive incoming category from prop or route param
   const incomingCategory = category ?? route?.params?.category;
 
@@ -843,6 +757,117 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         const mapY = (y: number) => Math.round((y - vbMinY) * scale + offsetY);
         const mapW = (w: number) => Math.max(2, Math.round(w * scale));
         const mapH = (h: number) => Math.max(2, Math.round(h * scale));
+        const getPathBounds = (d: string) => {
+          const tokens = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || [];
+          let i = 0;
+          let command = '';
+          let x = 0;
+          let y = 0;
+          let startX = 0;
+          let startY = 0;
+          let minX = Number.POSITIVE_INFINITY;
+          let minY = Number.POSITIVE_INFINITY;
+          let maxX = Number.NEGATIVE_INFINITY;
+          let maxY = Number.NEGATIVE_INFINITY;
+
+          const isCommand = (token: string) => /^[a-zA-Z]$/.test(token);
+          const hasNumber = () => i < tokens.length && !isCommand(tokens[i]);
+          const read = () => Number(tokens[i++]);
+          const include = (px: number, py: number) => {
+            if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+            minX = Math.min(minX, px);
+            minY = Math.min(minY, py);
+            maxX = Math.max(maxX, px);
+            maxY = Math.max(maxY, py);
+          };
+
+          while (i < tokens.length) {
+            if (isCommand(tokens[i])) {
+              command = tokens[i++];
+            }
+
+            const lower = command.toLowerCase();
+            const relative = command === lower;
+
+            if (lower === 'm' || lower === 'l' || lower === 't') {
+              while (hasNumber() && i + 1 < tokens.length) {
+                const nx = read();
+                const ny = read();
+                x = relative ? x + nx : nx;
+                y = relative ? y + ny : ny;
+                if (lower === 'm') {
+                  startX = x;
+                  startY = y;
+                  command = relative ? 'l' : 'L';
+                }
+                include(x, y);
+              }
+            } else if (lower === 'h') {
+              while (hasNumber()) {
+                const nx = read();
+                x = relative ? x + nx : nx;
+                include(x, y);
+              }
+            } else if (lower === 'v') {
+              while (hasNumber()) {
+                const ny = read();
+                y = relative ? y + ny : ny;
+                include(x, y);
+              }
+            } else if (lower === 'c') {
+              while (hasNumber() && i + 5 < tokens.length) {
+                const points = [read(), read(), read(), read(), read(), read()];
+                for (let p = 0; p < points.length; p += 2) {
+                  const px = relative ? x + points[p] : points[p];
+                  const py = relative ? y + points[p + 1] : points[p + 1];
+                  include(px, py);
+                }
+                x = relative ? x + points[4] : points[4];
+                y = relative ? y + points[5] : points[5];
+              }
+            } else if (lower === 's' || lower === 'q') {
+              while (hasNumber() && i + 3 < tokens.length) {
+                const points = [read(), read(), read(), read()];
+                for (let p = 0; p < points.length; p += 2) {
+                  const px = relative ? x + points[p] : points[p];
+                  const py = relative ? y + points[p + 1] : points[p + 1];
+                  include(px, py);
+                }
+                x = relative ? x + points[2] : points[2];
+                y = relative ? y + points[3] : points[3];
+              }
+            } else if (lower === 'a') {
+              while (hasNumber() && i + 6 < tokens.length) {
+                const rx = read();
+                const ry = read();
+                read(); read(); read();
+                const nx = read();
+                const ny = read();
+                x = relative ? x + nx : nx;
+                y = relative ? y + ny : ny;
+                include(x - rx, y - ry);
+                include(x + rx, y + ry);
+              }
+            } else if (lower === 'z') {
+              x = startX;
+              y = startY;
+              include(x, y);
+            } else {
+              break;
+            }
+          }
+
+          if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+            return null;
+          }
+
+          return {
+            x: minX,
+            y: minY,
+            width: Math.max(1, maxX - minX),
+            height: Math.max(1, maxY - minY),
+          };
+        };
 
         // TEXT nodes
         let m: RegExpExecArray | null;
@@ -917,8 +942,22 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
           const attrs = parseAttrs(m[1]);
           const d = attrs.d || '';
           if (!d) continue;
+          const bounds = getPathBounds(d);
+          if (!bounds) continue;
           const id = `svg_path_${nextId.current++}`;
-          itemsFromSvg.push({ id, type: 'shape', shapeType: 'path', x: 0, y: 0, width: CANVAS_SIZE, height: CANVAS_SIZE, rotation: 0, color: attrs.fill || '#df103f', pathD: d, pathViewBox: `${vbMinX} ${vbMinY} ${svgW} ${svgH}` });
+          itemsFromSvg.push({
+            id,
+            type: 'shape',
+            shapeType: 'path',
+            x: mapX(bounds.x),
+            y: mapY(bounds.y),
+            width: mapW(bounds.width),
+            height: mapH(bounds.height),
+            rotation: 0,
+            color: attrs.fill || '#df103f',
+            pathD: d,
+            pathViewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`,
+          });
         }
 
         // If we parsed items, use them as editable overlays; otherwise keep svgText
@@ -1502,8 +1541,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                                 {it.type === 'text'
                                   ? `Text: "${it.text}"`
                                   : it.type === 'shape'
-                                  ? `Shape: ${it.shapeType}`
-                                  : 'Image Component'}
+                                    ? `Shape: ${it.shapeType}`
+                                    : 'Image Component'}
                               </Text>
                             </View>
                             <View style={styles.layerActions}>

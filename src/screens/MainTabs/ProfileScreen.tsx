@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Avatar, Title, Text, Button, TextInput, SegmentedButtons, Card, Snackbar } from 'react-native-paper';
+import { Avatar, Title, Text, Button, TextInput, SegmentedButtons, Card, Snackbar, ActivityIndicator } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import { setAuthToken } from '../../services/api.service';
+import api from '../../services/api.service';
+import { clearTokens } from '../../services/token.service';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
-  const [username, setUsername] = useState('admin');
-  const [fullName, setFullName] = useState('Admin');
-  const [email] = useState('admin@flarelap.com');
+  const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [tab, setTab] = useState('account');
   const [street, setStreet] = useState('');
   const [country, setCountry] = useState('');
@@ -16,19 +18,61 @@ export default function ProfileScreen() {
   const [stateVal, setStateVal] = useState('');
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
 
   const showMessage = (message: string) => setSnackbar({ visible: true, message });
 
-  const handleLogout = () => {
-    // clear auth token for API
-    setAuthToken(null);
+  useEffect(() => {
+    let active = true;
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get('/auth/me');
+        if (active && response.data) {
+          const data = response.data?.user;
+          setUsername(data.username || '');
+          setFullName(data.fullName || '');
+          setEmail(data.email || '');
+          setStreet(data.street || '');
+          setCountry(data.country || '');
+          setPincode(data.pincode || '');
+          setStateVal(data.state || '');
+          setCity(data.city || '');
+        }
+      } catch (e: any) {
+        console.error('Error fetching profile:', e);
+        showMessage(e?.response?.data?.message || e?.message || 'Failed to load profile');
+      } finally {
+        if (active) {
+          setFetching(false);
+        }
+      }
+    };
+    fetchProfile();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await clearTokens();
+    } catch {}
     // reset navigation to login screen (clear history)
     // @ts-ignore
     navigation.reset && (navigation as any).reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
+  if (fetching) {
+    return (
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+        <ActivityIndicator size="large" color="#df103f" />
+      </SafeAreaView>
+    );
+  }
+
   return (
+    <SafeAreaView>
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
         <Title style={styles.pageTitle}>Settings</Title>
@@ -38,9 +82,9 @@ export default function ProfileScreen() {
       <Card style={styles.card}>
         <Card.Content>
           <View style={styles.userRow}>
-            <Avatar.Text size={64} label="A" />
+            <Avatar.Text size={64} label={fullName ? fullName.charAt(0).toUpperCase() : (username ? username.charAt(0).toUpperCase() : 'U')} />
             <View style={styles.userMeta}>
-              <Title style={styles.userTitle}>admin</Title>
+              <Title style={styles.userTitle}>{fullName || username || 'User'}</Title>
               <Text style={styles.userEmail}>{email}</Text>
             </View>
             <Button mode="contained" onPress={handleLogout}>Logout</Button>
@@ -76,10 +120,18 @@ export default function ProfileScreen() {
             <Button mode="contained" style={styles.saveBtn} loading={loading} disabled={loading} onPress={async () => {
               setLoading(true);
               try {
-                // TODO: call profile update API
-                showMessage('Profile saved');
+                await api.put('/auth/profile', {
+                  username,
+                  fullName,
+                  street,
+                  country,
+                  pincode,
+                  state: stateVal,
+                  city,
+                });
+                showMessage('Profile saved successfully');
               } catch (e: any) {
-                showMessage(e?.message || 'Save failed');
+                showMessage(e?.response?.data?.message || e?.message || 'Save failed');
               } finally {
                 setLoading(false);
               }
@@ -100,6 +152,7 @@ export default function ProfileScreen() {
         </Card>
       )}
     </ScrollView>
+    </SafeAreaView>
   );
 }
 

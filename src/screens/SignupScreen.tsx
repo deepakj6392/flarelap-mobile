@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import Logo from '../components/Logo';
 import { TextInput, Button, Title, Text } from 'react-native-paper';
 import { setAuthToken } from '../services/api.service';
@@ -21,6 +21,21 @@ function SignupScreen({ navigation }: any) {
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
 
   const showMessage = (message: string) => setSnackbar({ visible: true, message });
+
+
+  const openURL = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        showMessage(`Cannot open: ${url}`);
+      }
+    } catch (e) {
+      console.error('Failed to open URL', e);
+      showMessage('Failed to open link');
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -102,6 +117,11 @@ function SignupScreen({ navigation }: any) {
             Login
           </Button>
         </View>
+        <View style={styles.privacyRow}>
+          <Text style={styles.privacyText} onPress={() => openURL('https://flarelap.com/privacy')}>Privacy Policy</Text>
+          <Text style={styles.privacyPipe}> | </Text>
+          <Text style={styles.termsText} onPress={() => openURL('https://flarelap.com/terms')}>Terms & Conditions</Text>
+        </View>
       </View>
     </ScrollView>
   );
@@ -130,6 +150,10 @@ const styles = StyleSheet.create({
   section: { marginTop: 18, color: '#64748b', fontWeight: '700' },
   saveBtn: { marginTop: 18 },
   loginRow: { flexDirection: 'row', marginTop: 16, alignItems: 'center', justifyContent: 'center' },
+  privacyRow: { flexDirection: 'row', marginTop: 16, alignItems: 'center', justifyContent: 'center' },
+  privacyText: { color: '#aaaaaaff', fontSize: 12 },
+  privacyPipe: { color: '#aaaaaaff', fontSize: 12 },
+  termsText: { color: '#aaaaaaff', fontSize: 12 },
 });
 
 export default SignupScreen;

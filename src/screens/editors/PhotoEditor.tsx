@@ -9,7 +9,6 @@ import {
   Image as RNImage,
   TouchableOpacity,
   Dimensions,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   Share,
@@ -28,6 +27,7 @@ import Svg, {
 } from 'react-native-svg';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Screen Dimensions
 const { width: screenWidth } = Dimensions.get('window');
@@ -140,6 +140,12 @@ const BrushIcon = ({ size = 20, color = '#334155' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
     <Path d="M7.5 10.5c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zM11.5 7.5c.828 0 1.5-.672 1.5-1.5S12.328 4.5 11.5 4.5s-1.5.672-1.5 1.5.672 1.5 1.5 1.5zM16.5 9.5c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zM16.5 14.5c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zM6 15c0-3 3-5 6-5s6 2 6 5-4 5-6 5-6-2-6-5z" />
+  </Svg>
+);
+
+const MagicIcon = ({ size = 20, color = '#334155' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M15 4V2M15 16v-2M8 9H6M20 9h-2M17.8 6.2l1.4-1.4M10.8 13.2l-1.4 1.4M10.8 4.8 9.4 3.4M17.8 11.8l1.4 1.4M14 9l-9 9 1 1 9-9-1-1z" />
   </Svg>
 );
 
@@ -385,6 +391,7 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
   // Core Canvas State
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'select' | 'filters' | 'adjust' | 'transform' | 'draw' | 'overlays'>('select');
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
 
   // Adjustments States
   const [brightness, setBrightness] = useState(1.0);
@@ -579,6 +586,190 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
     setHistory([]);
     setHistoryIndex(-1);
     setSelectedOverlay(null);
+  };
+
+  const getUploadType = (uri: string) => {
+    const cleanUri = uri.split('?')[0].toLowerCase();
+    if (cleanUri.endsWith('.png')) return 'image/png';
+    if (cleanUri.endsWith('.webp')) return 'image/webp';
+    if (cleanUri.endsWith('.heic')) return 'image/heic';
+    if (cleanUri.endsWith('.heif')) return 'image/heif';
+    return 'image/jpeg';
+  };
+
+  const getUploadName = (uri: string, type: string) => {
+    const cleanUri = uri.split('?')[0];
+    const name = cleanUri.split('/').pop();
+    if (name && name.includes('.')) return name;
+    const extension = type.split('/')[1] || 'jpg';
+    return `flarelap-photo.${extension === 'jpeg' ? 'jpg' : extension}`;
+  };
+
+  const prepareImageForUpload = async (uri: string) => {
+    if (!uri.startsWith('http')) {
+      const type = getUploadType(uri);
+      return { uri, type, name: getUploadName(uri, type) };
+    }
+
+    const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+    if (!RNFS) {
+      throw new Error('Cannot prepare remote image for upload.');
+    }
+
+    const type = getUploadType(uri);
+    const name = getUploadName(uri, type);
+    const tmpDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
+    const localPath = `${tmpDir}/${Date.now()}_${name}`;
+    const download = RNFS.downloadFile({ fromUrl: uri, toFile: localPath });
+    const result = await download.promise;
+    if (result.statusCode < 200 || result.statusCode >= 300) {
+      throw new Error('Failed to download selected image before upload.');
+    }
+    return { uri: `file://${localPath}`, type, name };
+  };
+
+  const findImageUrlInResponse = (payload: any): string | null => {
+    if (!payload) return null;
+    if (typeof payload === 'string') return payload;
+    const candidates = [
+      payload.url,
+      payload.image_url,
+      payload.imageUrl,
+      payload.output_url,
+      payload.outputUrl,
+      payload.output,
+      payload.result,
+      payload.image,
+      payload.file,
+      payload.base64,
+      payload.b64,
+      payload.data,
+      payload.data?.url,
+      payload.data?.image_url,
+      payload.data?.imageUrl,
+      payload.data?.output_url,
+      payload.data?.outputUrl,
+      payload.data?.output,
+      payload.data?.result,
+      payload.data?.image,
+      payload.data?.file,
+      payload.data?.base64,
+      payload.data?.b64,
+    ];
+    return candidates.find((value) => typeof value === 'string' && value.trim().length > 0) || null;
+  };
+
+  const normalizeResultImageUri = async (value: string) => {
+    if (value.startsWith('/')) {
+      return `https://ai.flarelap.com${value}`;
+    }
+
+    if (value.startsWith('http') || value.startsWith('file://') || value.startsWith('content://') || value.startsWith('data:')) {
+      return value;
+    }
+
+    const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/;
+    if (value.length > 100 && base64Pattern.test(value.replace(/\s/g, ''))) {
+      const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+      if (!RNFS) return `data:image/png;base64,${value}`;
+      const tmpDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
+      const filePath = `${tmpDir}/flarelap_removed_bg_${Date.now()}.png`;
+      await RNFS.writeFile(filePath, value, 'base64');
+      return `file://${filePath}`;
+    }
+
+    return value;
+  };
+
+  const readBlobAsDataUrl = (blob: Blob) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const getImageExtensionFromType = (type: string) => {
+    if (type.includes('jpeg') || type.includes('jpg')) return 'jpg';
+    if (type.includes('webp')) return 'webp';
+    if (type.includes('heic')) return 'heic';
+    if (type.includes('heif')) return 'heif';
+    return 'png';
+  };
+
+  const saveBlobResponseAsImage = async (response: Response, contentType: string) => {
+    const blob = await response.blob();
+    const dataUrl = await readBlobAsDataUrl(blob);
+    const [meta, base64] = dataUrl.split(',');
+    if (!base64) {
+      throw new Error('Background removal returned an invalid image file.');
+    }
+
+    const imageType = (contentType || meta.match(/data:(.*);base64/)?.[1] || blob.type || 'image/png').split(';')[0];
+    const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+    if (!RNFS) {
+      return `data:${imageType};base64,${base64}`;
+    }
+
+    const tmpDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
+    const filePath = `${tmpDir}/flarelap_removed_bg_${Date.now()}.${getImageExtensionFromType(imageType)}`;
+    await RNFS.writeFile(filePath, base64, 'base64');
+    return `file://${filePath}`;
+  };
+
+  const handleRemoveBackground = async () => {
+    if (!imageUri || isRemovingBg) return;
+
+    setIsRemovingBg(true);
+    try {
+      const uploadFile = await prepareImageForUpload(imageUri);
+      const formData = new FormData();
+      formData.append('file', uploadFile as any);
+
+      const response = await fetch('https://ai.flarelap.com/remove-bg', {
+        method: 'POST',
+        headers: {
+          Accept: 'image/png, image/*, application/octet-stream, application/json',
+        },
+        body: formData,
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      let nextImageUri: string | null = null;
+
+      if (contentType.includes('application/json')) {
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || 'Background removal failed.');
+        }
+
+        const resultUri = findImageUrlInResponse(payload);
+        if (!resultUri) {
+          throw new Error('Background removed, but the response did not include an image URL.');
+        }
+        nextImageUri = await normalizeResultImageUri(resultUri);
+      } else if (contentType.startsWith('text/')) {
+        const payload = await response.text();
+        if (!response.ok) {
+          throw new Error(payload || 'Background removal failed.');
+        }
+        nextImageUri = await normalizeResultImageUri(payload);
+      } else {
+        if (!response.ok) {
+          throw new Error('Background removal failed.');
+        }
+        nextImageUri = await saveBlobResponseAsImage(response, contentType);
+      }
+
+      setImageUri(nextImageUri);
+      Alert.alert('Background Removed', 'Your photo background has been removed.');
+    } catch (err: any) {
+      console.warn('remove background failed', err);
+      Alert.alert('Remove Background Failed', err.message || 'Could not remove the background. Please try again.');
+    } finally {
+      setIsRemovingBg(false);
+    }
   };
 
   // --- Crop Aspect Ratios ---
@@ -1122,6 +1313,18 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                       Reset All
                     </Button>
                   </View>
+                  <Button
+                    mode="contained"
+                    buttonColor="#10B981"
+                    textColor="#ffffff"
+                    icon={() => <MagicIcon size={16} color="#fff" />}
+                    style={styles.removeBgButton}
+                    loading={isRemovingBg}
+                    disabled={isRemovingBg}
+                    onPress={handleRemoveBackground}
+                  >
+                    {isRemovingBg ? 'Removing Background...' : 'Remove Background'}
+                  </Button>
                 </View>
               )}
 
@@ -1613,6 +1816,7 @@ const styles = StyleSheet.create({
   actionButton: { marginHorizontal: 6, flex: 1 },
   actionButtonCamera: { marginHorizontal: 6, flex: 1, borderWidth: 1, borderColor: '#334155' },
   actionButtonReset: { marginHorizontal: 6, flex: 1, borderColor: '#475569' },
+  removeBgButton: { marginHorizontal: 6, marginTop: 10 },
 
   // Filters scroll
   filtersScroll: { paddingVertical: 4 },

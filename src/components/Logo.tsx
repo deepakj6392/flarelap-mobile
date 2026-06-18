@@ -10,7 +10,7 @@ export default function Logo({ size = 72 }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <Image source={require('../../assets/logo_round.jpeg')} style={{ width: imgSize, height: imgSize, resizeMode: 'contain', marginBottom: 8 }} />
+      <Image source={require('../../assets/logo_round.png')} style={{ width: imgSize, height: imgSize, resizeMode: 'contain', marginBottom: 8 }} />
     </View>
   );
 }

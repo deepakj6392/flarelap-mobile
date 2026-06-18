@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { Title, Paragraph, Text } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TOOLS = [
   {
@@ -67,6 +68,7 @@ const TOOLS = [
 
 export default function CreateScreen({ navigation }: any) {
   return (
+    <SafeAreaView>
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
         <Title style={styles.title}>Let's create something amazing!</Title>
@@ -79,13 +81,14 @@ export default function CreateScreen({ navigation }: any) {
             navigation.navigate(tool.route);
           }}>
             <View style={[styles.tileIcon, { backgroundColor: tileColor(i) }]} >
-              <Image source={tool.image} style={styles.tileImage} />
+              <Image source={tool.image} style={styles.tileImage} resizeMode="contain" fadeDuration={0} />
             </View>
             <Text style={styles.tileLabel}>{tool.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -104,7 +107,7 @@ const styles = StyleSheet.create({
   searchInput: { fontSize: 16 },
   grid: { marginTop: 20, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   tile: { width: '30%', backgroundColor: '#fff', borderRadius: 16, padding: 12, alignItems: 'center', marginBottom: 16, elevation: 3 },
-  tileIcon: { width: 90, height: 90, borderRadius: 12, padding: 15, marginBottom: 8 },
+  tileIcon: { width: 90, height: 90, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   tileLabel: { fontSize: 12, textAlign: 'center', color: '#334155' },
   trendingRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
   trendingTitle: { fontSize: 18, fontWeight: '800' },
@@ -113,5 +116,5 @@ const styles = StyleSheet.create({
   fabInner: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#ff8c4c', justifyContent: 'center', alignItems: 'center', marginBottom: 12, elevation: 6 },
   fabMain: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#df103f', justifyContent: 'center', alignItems: 'center', elevation: 8 },
   fabIcon: { color: '#fff', fontSize: 24, fontWeight: '700' },
-  tileImage: { width: '100%', height: '100%', borderRadius: 12 }
+  tileImage: { width: 60, height: 60, borderRadius: 12 }
 });

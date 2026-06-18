@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   translucentInput: { backgroundColor: 'rgba(255,255,255,0.08)' },
   inputContent: { paddingVertical: 8 },
   inputContentShift: { paddingTop: 18 },
-  button: { marginTop: 8, backgroundColor: THEME_COLORS.primary, color: '#000000' },
+  button: { marginTop: 8, backgroundColor: THEME_COLORS.primary, color: '#FFFFFF' },
   row: { flexDirection: 'row', marginTop: 16, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#d20d0dff', marginBottom: 8 },
 });

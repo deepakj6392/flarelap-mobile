@@ -23,7 +23,6 @@ import {
   Image as RNImage,
   TouchableOpacity,
   Dimensions,
-  SafeAreaView,
   ActivityIndicator,
   Modal,
   Share,
@@ -37,6 +36,7 @@ import Svg, {
 } from 'react-native-svg';
 import { launchImageLibrary } from 'react-native-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -99,6 +99,7 @@ const EMOJI_LIST = [
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type LayerType = 'shape' | 'text' | 'emoji' | 'image';
+type ToolTab = 'canvas' | 'shapes' | 'text' | 'emoji' | 'image' | 'props';
 
 interface CanvasLayer {
   id: string;
@@ -114,6 +115,81 @@ interface CanvasLayer {
   emoji?: string;
   // image
   uri?: string; opacity?: number; borderRadius?: number;
+}
+
+const TAB_ITEMS: { id: ToolTab; label: string }[] = [
+  { id: 'canvas', label: 'BG' },
+  { id: 'shapes', label: 'Shapes' },
+  { id: 'text', label: 'Text' },
+  { id: 'emoji', label: 'Emoji' },
+  { id: 'image', label: 'Image' },
+  { id: 'props', label: 'Props' },
+];
+
+function TabSvgIcon({ id, active }: { id: ToolTab; active: boolean }) {
+  const color = active ? '#38BDF8' : '#64748B';
+  const accent = active ? '#0C4A6E' : '#1E293B';
+  const common = {
+    stroke: color,
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+
+  switch (id) {
+    case 'canvas':
+      return (
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+          <Rect x="3" y="3" width="18" height="18" rx="3" fill={accent} {...common} />
+          <Path d="M7 17h10" {...common} />
+          <Path d="M8 13l2.5-3 2 2.4L15 9l2 4" {...common} />
+        </Svg>
+      );
+    case 'shapes':
+      return (
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+          <Rect x="4" y="4" width="7" height="7" rx="1.5" fill={accent} {...common} />
+          <Circle cx="16.5" cy="7.5" r="3.5" fill={accent} {...common} />
+          <Path d="M5 20l4-7 4 7H5z" fill={accent} {...common} />
+        </Svg>
+      );
+    case 'text':
+      return (
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+          <Path d="M4 6V4h16v2" {...common} />
+          <Path d="M12 4v16" {...common} />
+          <Path d="M8 20h8" {...common} />
+        </Svg>
+      );
+    case 'emoji':
+      return (
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+          <Circle cx="12" cy="12" r="9" fill={accent} {...common} />
+          <Circle cx="9" cy="10" r="1" fill={color} />
+          <Circle cx="15" cy="10" r="1" fill={color} />
+          <Path d="M8.5 14.5c1 1.4 2.1 2 3.5 2s2.5-.6 3.5-2" {...common} />
+        </Svg>
+      );
+    case 'image':
+      return (
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+          <Rect x="3" y="5" width="18" height="14" rx="2" fill={accent} {...common} />
+          <Circle cx="8.5" cy="10" r="1.5" fill={color} />
+          <Path d="M21 16l-4.2-4.2a1.5 1.5 0 0 0-2.1 0L8 19" {...common} />
+        </Svg>
+      );
+    case 'props':
+      return (
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+          <Path d="M4 7h10" {...common} />
+          <Circle cx="17" cy="7" r="2.5" fill={accent} {...common} />
+          <Path d="M20 17H10" {...common} />
+          <Circle cx="7" cy="17" r="2.5" fill={accent} {...common} />
+        </Svg>
+      );
+    default:
+      return null;
+  }
 }
 
 // ─── SVG shape path builders ───────────────────────────────────────────────────
@@ -409,7 +485,7 @@ export default function LogoAndSticker({ navigation, route }: { navigation?: any
   const [histIdx, setHistIdx] = useState(0);
 
   // Active tool tab
-  const [activeTab, setActiveTab] = useState<'canvas' | 'shapes' | 'text' | 'emoji' | 'image' | 'props'>('shapes');
+  const [activeTab, setActiveTab] = useState<ToolTab>('shapes');
 
   // Text modal
   const [textModal, setTextModal] = useState(false);
@@ -535,6 +611,64 @@ export default function LogoAndSticker({ navigation, route }: { navigation?: any
     { text: 'Clear', style: 'destructive', onPress: () => { setLayers([]); setSelectedId(null); commitHistory([]); } },
   ]);
 
+  // ── export helpers ──
+  const saveImageToDevice = async (localUri: string) => {
+    try {
+      const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+      if (!RNFS) throw new Error('RNFS not available');
+
+      const filename = `flarelap_logo_sticker_${Date.now()}.png`;
+      const destPath = Platform.OS === 'android'
+        ? `${RNFS.DownloadDirectoryPath}/${filename}`
+        : `${RNFS.DocumentDirectoryPath}/${filename}`;
+
+      if (localUri.startsWith('file://')) {
+        await RNFS.copyFile(localUri.replace('file://', ''), destPath);
+      } else if (localUri.startsWith('data:')) {
+        const base64 = localUri.split(',')[1];
+        await RNFS.writeFile(destPath, base64, 'base64');
+      } else {
+        await RNFS.copyFile(localUri, destPath);
+      }
+
+      try {
+        if (Platform.OS === 'android' && RNFS.scanFile) {
+          await RNFS.scanFile(destPath);
+        }
+      } catch {}
+
+      Alert.alert('Saved', `Image saved to ${Platform.OS === 'android' ? 'Downloads' : 'Files'} (${filename})`);
+      return true;
+    } catch (err) {
+      console.warn('saveImageToDevice failed', err);
+      try {
+        await Share.share(Platform.OS === 'ios' ? { url: localUri } : { message: 'Logo/Sticker made with Flarelap', url: localUri });
+      } catch {
+        Alert.alert('Save failed', 'Could not save or share the image.');
+      }
+      return false;
+    }
+  };
+
+  const shareImageFile = async (localUri: string) => {
+    try {
+      const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+      let shareUrl = localUri;
+
+      if (localUri.startsWith('data:') && RNFS) {
+        const tmp = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
+        const filePath = `${tmp}/flarelap_logo_sticker_share_${Date.now()}.png`;
+        await RNFS.writeFile(filePath, localUri.split(',')[1], 'base64');
+        shareUrl = `file://${filePath}`;
+      }
+
+      await Share.share(Platform.OS === 'ios' ? { url: shareUrl } : { message: 'Logo/Sticker made with Flarelap', url: shareUrl });
+    } catch (err) {
+      console.warn('shareImageFile failed', err);
+      Alert.alert('Share Failed', 'Failed to share the image.');
+    }
+  };
+
   // ── export ──
   const handleExport = async () => {
     setSelectedId(null);
@@ -542,7 +676,15 @@ export default function LogoAndSticker({ navigation, route }: { navigation?: any
     setExporting(true);
     try {
       const uri = await captureRef(canvasRef, { format: 'png', quality: 1 });
-      await Share.share({ url: uri, message: 'Logo/Sticker made with Flarelap ✨' });
+      Alert.alert(
+        'Logo Export Ready!',
+        'Your logo/sticker is ready. What would you like to do?',
+        [
+          { text: 'Download', onPress: async () => { await saveImageToDevice(uri); } },
+          { text: 'Share', onPress: async () => { await shareImageFile(uri); } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
     } catch (e: any) {
       Alert.alert('Export Failed', e?.message ?? 'Unknown error');
     } finally {
@@ -828,15 +970,9 @@ export default function LogoAndSticker({ navigation, route }: { navigation?: any
 
         {/* Tab strip */}
         <View style={styles.tabStrip}>
-          {([
-            { id: 'canvas',  label: '🎨 BG'     },
-            { id: 'shapes',  label: '⬡ Shapes'  },
-            { id: 'text',    label: 'T Text'     },
-            { id: 'emoji',   label: '😂 Emoji'   },
-            { id: 'image',   label: '🖼 Image'   },
-            { id: 'props',   label: '⚙ Props'    },
-          ] as const).map(tab => (
-            <TouchableOpacity key={tab.id} style={styles.tabItem} onPress={() => setActiveTab(tab.id)}>
+          {TAB_ITEMS.map(tab => (
+            <TouchableOpacity key={tab.id} style={[styles.tabItem, activeTab === tab.id && styles.tabItemActive]} onPress={() => setActiveTab(tab.id)}>
+              <TabSvgIcon id={tab.id} active={activeTab === tab.id} />
               <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
@@ -965,9 +1101,10 @@ const styles = StyleSheet.create({
   deleteBtnLabel: { color: '#FCA5A5', fontWeight: '700', fontSize: 13 },
 
   // Tab strip
-  tabStrip: { height: 52, flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#1E293B', backgroundColor: '#060A12' },
-  tabItem:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  tabLabel: { fontSize: 9, color: '#475569', fontWeight: '700', textAlign: 'center' },
+  tabStrip: { height: 64, flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#1E293B', backgroundColor: '#060A12' },
+  tabItem:  { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 6, paddingBottom: 5 },
+  tabItemActive: { backgroundColor: '#08111D' },
+  tabLabel: { fontSize: 9, color: '#64748B', fontWeight: '700', textAlign: 'center', marginTop: 3 },
   tabLabelActive: { color: '#38BDF8' },
 
   // Modal

@@ -6,7 +6,6 @@ import {
   Alert,
   TouchableOpacity,
   Dimensions,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   Share,
@@ -19,6 +18,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Screen Dimensions
 const { width: screenWidth } = Dimensions.get('window');
