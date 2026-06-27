@@ -1223,6 +1223,9 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
       }
 
       setLoading(true);
+      setItems([]);
+      setSvgText(null);
+      setSelected(null);
       try {
         // Call the Fabric.js conversion API
         const { fabricJSON } = await svgUrlToFabricJSON(tmpl.svg_url);
