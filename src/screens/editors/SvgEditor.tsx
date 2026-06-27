@@ -263,7 +263,7 @@ const mapFabricObjectsToItems = async (
         height: Math.max(20, scaledH),
         rotation: angle,
         text: obj.text ?? '',
-        fontSize: obj.fontSize ?? 16,
+        fontSize: (obj.fontSize ?? 16) * scaleY,
         color: fill === 'transparent' || fill === 'none' ? '#000000' : fill,
         fontWeight: String(obj.fontWeight) === 'bold' || Number(obj.fontWeight) >= 700 ? 'bold' : 'normal',
         fontStyle: obj.fontStyle === 'italic' ? 'italic' : 'normal',
@@ -1164,20 +1164,54 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         const { fabricJSON } = await svgUrlToFabricJSON(tmpl.svg_url);
         console.log("fabricJSON", fabricJSON, tmpl.svg_url);
         // Derive canvas dimensions from the Fabric objects bounding box
-        let maxRight = 400;
-        let maxBottom = 400;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
         for (const obj of fabricJSON.objects) {
           const scaleX = obj.scaleX ?? 1;
           const scaleY = obj.scaleY ?? 1;
           const w = (obj.width ?? 0) * scaleX;
           const h = (obj.height ?? 0) * scaleY;
           const isCenterOrigin = (obj.originX ?? 'left') === 'center';
-          const right = isCenterOrigin ? (obj.left ?? 0) + w / 2 : (obj.left ?? 0) + w;
-          const bottom = isCenterOrigin ? (obj.top ?? 0) + h / 2 : (obj.top ?? 0) + h;
-          if (right > maxRight) maxRight = right;
-          if (bottom > maxBottom) maxBottom = bottom;
+          const left = isCenterOrigin ? (obj.left ?? 0) - w / 2 : (obj.left ?? 0);
+          const top = isCenterOrigin ? (obj.top ?? 0) - h / 2 : (obj.top ?? 0);
+          
+          if (left < minX) minX = left;
+          if (top < minY) minY = top;
+          if (left + w > maxX) maxX = left + w;
+          if (top + h > maxY) maxY = top + h;
         }
-        const svgMetrics: CanvasMetrics = { width: maxRight, height: maxBottom, minX: 0, minY: 0 };
+
+        const contentWidth = Number.isFinite(maxX) && Number.isFinite(minX) ? maxX - minX : 400;
+        const contentHeight = Number.isFinite(maxY) && Number.isFinite(minY) ? maxY - minY : 400;
+        const templateWidth =  contentWidth;
+        const templateHeight = contentHeight;
+
+        const targetWidth = windowWidth;
+        const targetHeight = templateWidth > 0 ? (templateHeight / templateWidth) * targetWidth : targetWidth;
+
+        if (templateWidth > 0 && templateHeight > 0) {
+          const sourceLeft = Number.isFinite(minX) ? minX : 0;
+          const sourceTop = Number.isFinite(minY) ? minY : 0;
+          const fitWidth = contentWidth > 0 ? contentWidth : templateWidth;
+          const fitHeight = contentHeight > 0 ? contentHeight : templateHeight;
+          const scaleX = targetWidth / fitWidth;
+          const scaleY = targetHeight / fitHeight;
+
+          fabricJSON.objects.forEach((obj: any) => {
+            const currentLeft = obj.left || 0;
+            const currentTop = obj.top || 0;
+
+            obj.left = (currentLeft - sourceLeft) * scaleX;
+            obj.top = (currentTop - sourceTop) * scaleY;
+            obj.scaleX = (obj.scaleX || 1) * scaleX;
+            obj.scaleY = (obj.scaleY || 1) * scaleY;
+          });
+        }
+        
+        const svgMetrics: CanvasMetrics = { width: targetWidth, height: targetHeight, minX: 0, minY: 0 };
 
         // Use the clean SVG URL (returned by API) as the background layer and cache base64 images
         const bgRes = await fetch(tmpl.svg_url);
