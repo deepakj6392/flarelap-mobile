@@ -17,7 +17,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Title, Button, TextInput, Text, ActivityIndicator, Portal, Modal } from 'react-native-paper';
-import Svg, { Rect, Circle, Polygon, Line, Path, SvgXml } from 'react-native-svg';
+import Svg, { Rect, Circle, Polygon, Line, Path, SvgXml, Defs, ClipPath, Image as SvgImage } from 'react-native-svg';
 import RNFS from 'react-native-fs';
 import { Template } from '../../../types/template';
 import { getAllTemplates, svgUrlToFabricJSON, FabricObject, svgStringToFabricJSON } from '../../services/template.service';
@@ -293,6 +293,45 @@ const mapFabricObjectsToItems = async (
           resolvedSrc = resolveRelativeUrl(baseUrl, obj.src);
         }
       }
+      
+      let clipPathD = undefined;
+      if (obj.clipPath) {
+         const clipType = (obj.clipPath.type || '').toLowerCase();
+         const cW = scaledW;
+         const cH = scaledH;
+         if (clipType === 'rect') {
+           const rx = (obj.clipPath.rx || 0) * scaleX;
+           const ry = (obj.clipPath.ry || 0) * scaleY;
+           if (rx > 0 || ry > 0) {
+             clipPathD = `M ${rx} 0 H ${cW-rx} A ${rx} ${ry} 0 0 1 ${cW} ${ry} V ${cH-ry} A ${rx} ${ry} 0 0 1 ${cW-rx} ${cH} H ${rx} A ${rx} ${ry} 0 0 1 0 ${cH-ry} V ${ry} A ${rx} ${ry} 0 0 1 ${rx} 0 Z`;
+           } else {
+             clipPathD = `M 0 0 H ${cW} V ${cH} H 0 Z`;
+           }
+         } else if (clipType === 'circle') {
+           const r = Math.min(cW, cH) / 2;
+           const cx = cW / 2;
+           const cy = cH / 2;
+           clipPathD = `M ${cx} ${cy - r} A ${r} ${r} 0 1 0 ${cx} ${cy + r} A ${r} ${r} 0 1 0 ${cx} ${cy - r}`;
+         } else if (clipType === 'polygon' || clipType === 'polyline') {
+           if (Array.isArray(obj.clipPath.points) && obj.clipPath.points.length > 0) {
+             const xs = obj.clipPath.points.map((p: any) => p.x);
+             const ys = obj.clipPath.points.map((p: any) => p.y);
+             const minX = Math.min(...xs);
+             const minY = Math.min(...ys);
+             const maxX = Math.max(...xs);
+             const maxY = Math.max(...ys);
+             const pScaleX = cW / (maxX - minX || 1);
+             const pScaleY = cH / (maxY - minY || 1);
+             const pts = obj.clipPath.points.map((p: any) => `${(p.x - minX) * pScaleX},${(p.y - minY) * pScaleY}`);
+             clipPathD = `M ${pts[0]} ` + pts.slice(1).map((p: string) => `L ${p}`).join(' ') + (clipType === 'polygon' ? ' Z' : '');
+           }
+         } else if (clipType === 'triangle') {
+           clipPathD = `M ${cW/2} 0 L ${cW} ${cH} L 0 ${cH} Z`;
+         } else if (clipType === 'path' && Array.isArray(obj.clipPath.path)) {
+           clipPathD = fabricPathToString(obj.clipPath.path);
+         }
+      }
+
       items.push({
         id: `fab_img_${nextIdRef.current++}`,
         type: 'image',
@@ -304,6 +343,10 @@ const mapFabricObjectsToItems = async (
         uri: resolvedSrc,
         opacity,
         borderRadius: 0,
+        clipPathD,
+        clipPathTransform: (obj.clipPath?.type || '').toLowerCase() === 'path' 
+          ? `translate(${scaledW/2}, ${scaledH/2}) scale(${scaledW / (obj.clipPath.width || scaledW)}, ${scaledH / (obj.clipPath.height || scaledH)})`
+          : undefined,
       });
       continue;
     }
@@ -469,6 +512,8 @@ type Item = {
   pathD?: string;
   pathViewBox?: string;
   strokeDasharray?: string;
+  clipPathD?: string;
+  clipPathTransform?: string;
 };
 
 // Custom Slider Component
@@ -758,7 +803,26 @@ function Movable({ item, selected, zIndex, canvasScaleX, canvasScaleY, onSelect,
           </RNText>
         )}
         {item.type === 'shape' && renderShape()}
-        {item.type === 'image' && (
+        {item.type === 'image' && item.clipPathD && (
+          <Svg width="100%" height="100%" viewBox={`0 0 ${item.width} ${item.height}`}>
+            <Defs>
+              <ClipPath id={`clip_${item.id}`}>
+                <Path d={item.clipPathD} transform={item.clipPathTransform} />
+              </ClipPath>
+            </Defs>
+            <SvgImage
+              x="0"
+              y="0"
+              width="100%"
+              height="100%"
+              preserveAspectRatio="xMidYMid meet"
+              href={{ uri: item.uri || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=400' }}
+              clipPath={`url(#clip_${item.id})`}
+              opacity={item.opacity ?? 1}
+            />
+          </Svg>
+        )}
+        {item.type === 'image' && !item.clipPathD && (
           <RNImage
             source={{ uri: item.uri || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=400' }}
             style={{
@@ -1986,9 +2050,10 @@ const styles = StyleSheet.create({
   // Canvas Workspace area
   canvasContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     backgroundColor: '#f1f5f9',
+    paddingTop: 16,
   },
   canvasWrapper: {
     position: 'relative',
