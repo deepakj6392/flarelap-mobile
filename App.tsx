@@ -36,7 +36,7 @@ function App(): React.JSX.Element {
 
   return (
     <PaperProvider theme={theme}>
-  {/* Ensure status bar is visible on non-splash screens by default */}
+      {/* Ensure status bar is visible on non-splash screens by default */}
       <StatusBar barStyle="light-content" hidden={false} />
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { Title, Paragraph, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { THEME_COLORS } from '../../constants';
 
 const TOOLS = [
   {
@@ -68,8 +69,8 @@ const TOOLS = [
 
 export default function CreateScreen({ navigation }: any) {
   return (
-    <SafeAreaView>
-    <ScrollView contentContainerStyle={styles.scroll}>
+    <SafeAreaView style={{ backgroundColor: THEME_COLORS.primary }}>
+    <ScrollView contentContainerStyle={styles.scroll} >
       <View style={styles.header}>
         <Title style={styles.title}>Let's create something amazing!</Title>
         <Paragraph style={styles.subtitle}>Create stunning designs in minutes with AI-powered tools</Paragraph>
@@ -88,6 +89,7 @@ export default function CreateScreen({ navigation }: any) {
         ))}
       </View>
     </ScrollView>
+    <View style={{ height: 80, backgroundColor: '#ffffffff' }} />
     </SafeAreaView>
   );
 }
@@ -98,7 +100,7 @@ function tileColor(index: number) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 40, backgroundColor: '#ffffffff' },
+  scroll: { padding: 20, paddingBottom: 0, backgroundColor: '#ffffffff' },
   header: { alignItems: 'center', marginTop: 6, marginBottom: 12 },
   title: { fontSize: 22, fontWeight: '800', textAlign: 'center', color: '#df103f' },
   subtitle: { textAlign: 'center', color: '#556070', marginTop: 8, maxWidth: 340 },

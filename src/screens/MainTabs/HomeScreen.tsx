@@ -22,8 +22,9 @@ export default function HomeScreen() {
   }, []);
 
   return (
-    <SafeAreaView>
-    <ScrollView contentContainerStyle={styles.scroll}>
+    <SafeAreaView style={{ backgroundColor: THEME_COLORS.primary }}>
+      
+     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
         <Title style={styles.title}>Start with a
           <Text style={styles.highlight}> Template</Text>
@@ -71,12 +72,13 @@ export default function HomeScreen() {
         )}
       />
     </ScrollView>
+    <View style={{ height: 60, backgroundColor: '#ffffffff' }} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 80, backgroundColor: '#fff' },
+  scroll: { paddingHorizontal: 20,paddingTop:80, backgroundColor: '#fff', height: '100%' },
   header: { alignItems: 'center', marginBottom: 18 },
   title: { fontSize: 26, fontWeight: '800', textAlign: 'center' },
   highlight: { color: THEME_COLORS.primary },
@@ -90,7 +92,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '800', flex: 1 },
   countBadge: { backgroundColor: '#eef2ff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   countText: { color: '#374151', fontWeight: '700' },
-  templates: { paddingBottom: 40 },
+  templates: { paddingBottom: 0 },
   templateCard: { borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
   templateContent: { padding: 0 },
   thumb: { height: 160, backgroundColor: '#e6eef8' },

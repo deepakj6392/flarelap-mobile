@@ -9,4 +9,5 @@ export const API_ROUTES = {
   USER_PROFILE: '/user/profile',
   TEMPLATES: '/templates',
   TRENDING_TEMPLATES: '/templates/trending',
+  SVG_TO_FABRIC: '/image/svg-to-fabric', 
 };

@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api.service';
 import { clearTokens } from '../../services/token.service';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { THEME_COLORS } from '../../constants';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -72,7 +73,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView>
+    <SafeAreaView style={{ backgroundColor: THEME_COLORS.primary }}>
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
         <Title style={styles.pageTitle}>Settings</Title>
@@ -152,12 +153,13 @@ export default function ProfileScreen() {
         </Card>
       )}
     </ScrollView>
+     <View style={{ height: 60, backgroundColor: '#ffffffff' }} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 60, backgroundColor: '#f8fafc' },
+  scroll: { padding: 20,  backgroundColor: '#f8fafc' },
   header: { marginBottom: 12 },
   pageTitle: { fontSize: 24, fontWeight: '800' },
   subtitle: { color: '#64748b', marginTop: 6 },

@@ -5,11 +5,13 @@ const API_BASE = API_URL || 'https://api.flarelap.com';
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
+  timeout: 600000, // 10 minutes timeout
+  maxBodyLength: Infinity,
+  maxContentLength: Infinity,
 });
 
 // Optional: set auth token for future requests

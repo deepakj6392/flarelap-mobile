@@ -4,6 +4,7 @@ import { Title, Searchbar, Text, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api.service';
+import { THEME_COLORS } from '../../constants';
 
 function DesignCard({ item }: { item: any }) {
   const navigation = useNavigation<any>();
@@ -194,13 +195,14 @@ export default function DesignsScreen() {
           renderItem={({ item }) => <DesignCard item={item} />}
         />
       </View>
+       <View style={{ height: 60, backgroundColor: '#ffffffff' }} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fafc' },
-  container: { flex: 1 },
+  safe: { flex: 1, backgroundColor: THEME_COLORS.primary },
+  container: {  backgroundColor: '#ffffffff' },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
   headerContainer: { paddingHorizontal: 16, paddingTop: 16 },
   header: { marginBottom: 8 },

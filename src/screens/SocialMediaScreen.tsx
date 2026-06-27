@@ -11,6 +11,6 @@ export default function SocialMediaScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   button: { marginTop: 20 }
 });

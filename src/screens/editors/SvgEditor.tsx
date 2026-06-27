@@ -9,15 +9,18 @@ import {
   Image as RNImage,
   TouchableOpacity,
   Dimensions,
+  useWindowDimensions,
+  LayoutChangeEvent,
   KeyboardAvoidingView,
   Platform,
   Image,
   FlatList,
 } from 'react-native';
 import { Title, Button, TextInput, Text, ActivityIndicator, Portal, Modal } from 'react-native-paper';
-import Svg, { SvgXml, Rect, Circle, Polygon, Line, Path } from 'react-native-svg';
+import Svg, { Rect, Circle, Polygon, Line, Path, SvgXml } from 'react-native-svg';
+import RNFS from 'react-native-fs';
 import { Template } from '../../../types/template';
-import { getAllTemplates } from '../../services/template.service';
+import { getAllTemplates, svgUrlToFabricJSON, FabricObject, svgStringToFabricJSON } from '../../services/template.service';
 import {
   UndoIcon,
   RedoIcon,
@@ -41,7 +44,144 @@ import {
 
 // Get Responsive Canvas dimensions
 const { width: screenWidth } = Dimensions.get('window');
-const CANVAS_SIZE = Math.min(screenWidth - 32, 400);
+const HEADER_HEIGHT = 54;
+const DEFAULT_CANVAS_METRICS = { width: 400, height: 400, minX: 0, minY: 0 };
+
+type CanvasMetrics = typeof DEFAULT_CANVAS_METRICS;
+
+
+
+const saveBase64ToTempFile = async (base64Data: string, filename: string): Promise<string> => {
+  try {
+    const base64Content = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
+    const tempDir = RNFS.TemporaryDirectoryPath;
+    const filePath = `${tempDir}/${filename}`;
+    await RNFS.writeFile(filePath, base64Content, 'base64');
+    return `file://${filePath}`;
+  } catch (err) {
+    console.warn('Failed to save base64 to temp file:', err);
+    return base64Data;
+  }
+};
+
+const processSvgBase64Images = async (svgText: string | null): Promise<{ cleanSvgText: string | null; localFileMap: Map<string, string> }> => {
+  const localFileMap = new Map<string, string>();
+  if (!svgText) return { cleanSvgText: svgText, localFileMap };
+
+  let cleanSvgText = svgText;
+  const svgImageRegex = /['"](data:image\/[a-z]+;base64,[^'"]+)['"]/g;
+  let match;
+
+  const matches: string[] = [];
+  while ((match = svgImageRegex.exec(svgText)) !== null) {
+    matches.push(match[1]);
+  }
+
+  for (let i = 0; i < matches.length; i++) {
+    const base64Data = matches[i];
+    const extension = base64Data.match(/data:image\/([a-z]+);base64/)?.[1] || 'png';
+    const filename = `svg_inline_img_${Date.now()}_${i}.${extension}`;
+    const fileUri = await saveBase64ToTempFile(base64Data, filename);
+
+    localFileMap.set(base64Data.trim(), fileUri);
+    cleanSvgText = cleanSvgText.replace(base64Data, fileUri);
+  }
+
+  return { cleanSvgText, localFileMap };
+};
+
+const resolveRelativeUrl = (baseUrl: string | null | undefined, relativeUrl: string): string => {
+  if (!relativeUrl) return '';
+  const trimmed = relativeUrl.trim();
+
+  // Data URIs can contain whitespaces/newlines which fail to load on mobile native.
+  // We sanitize them by removing all internal whitespaces.
+  if (trimmed.startsWith('data:')) {
+    return trimmed.replace(/\s+/g, '');
+  }
+
+  if (trimmed.startsWith('file://')) {
+    return trimmed;
+  }
+
+  // Fallback to backend domain if base URL is missing or relative
+  const fallbackBase = 'https://api.flarelap.com/';
+  let baseToUse = baseUrl || fallbackBase;
+  if (!baseToUse.startsWith('http://') && !baseToUse.startsWith('https://')) {
+    baseToUse = fallbackBase;
+  }
+
+  try {
+    return new URL(trimmed, baseToUse).href;
+  } catch (e) {
+    if (trimmed.startsWith('/')) {
+      const match = baseToUse.match(/^(https?:\/\/[^\/]+)/);
+      if (match) {
+        return `${match[1]}${trimmed}`;
+      }
+      return trimmed;
+    }
+
+    const cleanBaseUrl = baseToUse.split('?')[0].split('#')[0];
+    const baseParts = cleanBaseUrl.split('/');
+    if (baseParts.length > 3) {
+      baseParts.pop(); // Remove file name
+    }
+    const basePath = baseParts.join('/');
+
+    return `${basePath}/${trimmed}`;
+  }
+};
+
+const preprocessSvg = (xml: string | null): string | null => {
+  if (!xml) return null;
+  // Remove font-variation-settings to prevent Android native crash in react-native-svg
+  const cleanedXml = xml
+    .replace(/font-variation-settings\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/font-variation-settings\s*:\s*[^;"}]*;?/gi, '')
+    .replace(/font-variation-settings\s*:\s*[^;'}];?/gi, '');
+  // Find the opening <svg ...> tag
+
+  const svgTagMatch = cleanedXml.match(/<svg([^>]*)>/i);
+  if (!svgTagMatch) return cleanedXml;
+
+  const svgTag = svgTagMatch[0];
+
+  // Extract existing width and height if present
+  const widthMatch = svgTag.match(/width=["']([^"']+)["']/i);
+  const heightMatch = svgTag.match(/height=["']([^"']+)["']/i);
+  const viewBoxMatch = svgTag.match(/viewBox=["']([^"']+)["']/i);
+
+  let newTag = svgTag;
+
+  // If there's no viewBox but there are width and height, add viewBox to ensure proper scaling
+  if (!viewBoxMatch && widthMatch && heightMatch) {
+    const w = widthMatch[1].replace(/px/gi, '').trim();
+    const h = heightMatch[1].replace(/px/gi, '').trim();
+    if (!isNaN(parseFloat(w)) && !isNaN(parseFloat(h))) {
+      newTag = newTag.replace(/>$/, ` viewBox="0 0 ${w} ${h}">`);
+    }
+  }
+
+  // Force width and height to 100% in the root tag so it scales dynamically
+  // within the container size defined by width and height props of SvgXml
+  if (newTag.match(/width=["']([^"']+)["']/i)) {
+    newTag = newTag.replace(/width=["']([^"']+)["']/i, 'width="100%"');
+  } else {
+    newTag = newTag.replace(/<svg/i, '<svg width="100%"');
+  }
+
+  if (newTag.match(/height=["']([^"']+)["']/i)) {
+    newTag = newTag.replace(/height=["']([^"']+)["']/i, 'height="100%"');
+  } else {
+    newTag = newTag.replace(/<svg/i, '<svg height="100%"');
+  }
+
+  return cleanedXml.replace(svgTag, newTag);
+};
+
+
+
 
 const STOCK_IMAGES = [
   { name: 'Gradient Pink', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=400' },
@@ -65,6 +205,7 @@ import YouTubeThumbIcon from '../../assets/icons/social/thumbnail_youtube_intro.
 import LinkedInBannerIcon from '../../assets/icons/social/thumbnail_linkedin_banner_landscape.svg';
 import PinterestPinIcon from '../../assets/icons/social/thumbnail_pinterest_pin_portrait.svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { THEME_COLORS } from '../../constants';
 
 const SOCIAL_SUBCATS = [
   { id: 'instagram_post', title: 'Instagram Post', icon: <InstagramPostIcon width={150} height={150} />, size: '1080 x 1080' },
@@ -75,6 +216,234 @@ const SOCIAL_SUBCATS = [
   { id: 'linkedin_banner', title: 'LinkedIn Banner', icon: <LinkedInBannerIcon width={150} height={150} />, size: '1584 x 396' },
   { id: 'pinterest_pin', title: 'Pinterest Pin', icon: <PinterestPinIcon width={150} height={150} />, size: '1000 x 1500' },
 ];
+
+
+
+// ─── Fabric.js JSON → Item mapper ──────────────────────────────────────────
+// Fabric stores positions as center-point (left/top = center when originX/Y='center').
+// We convert to top-left origin expected by the canvas overlay system.
+const fabricPathToString = (path: Array<Array<string | number>>): string =>
+  path.map((seg) => seg.join(' ')).join(' ');
+
+const mapFabricObjectsToItems = async (
+  objects: FabricObject[],
+  nextIdRef: React.MutableRefObject<number>,
+  baseUrl?: string | null,
+  localFileMap?: Map<string, string>
+): Promise<Item[]> => {
+  const items: Item[] = [];
+
+  for (const obj of objects) {
+    if (obj.visible === false) continue;
+
+    const scaleX = obj.scaleX ?? 1;
+    const scaleY = obj.scaleY ?? 1;
+    const scaledW = (obj.width ?? 0) * scaleX;
+    const scaledH = (obj.height ?? 0) * scaleY;
+    const angle = obj.angle ?? 0;
+    const opacity = obj.opacity ?? 1;
+    const fill = typeof obj.fill === 'string' ? obj.fill : '#df103f';
+    const stroke = typeof obj.stroke === 'string' ? obj.stroke : '#000000';
+    const strokeWidth = obj.strokeWidth ?? 0;
+
+    // Fabric originX/Y 'center' means left/top is the center point
+    const isCenterOrigin = (obj.originX ?? 'left') === 'center';
+    const x = isCenterOrigin ? (obj.left ?? 0) - scaledW / 2 : (obj.left ?? 0);
+    const y = isCenterOrigin ? (obj.top ?? 0) - scaledH / 2 : (obj.top ?? 0);
+
+    const lowerType = (obj.type ?? '').toLowerCase();
+
+    if (lowerType === 'i-text' || lowerType === 'textbox' || lowerType === 'text') {
+      items.push({
+        id: `fab_text_${nextIdRef.current++}`,
+        type: 'text',
+        x,
+        y,
+        width: Math.max(40, scaledW),
+        height: Math.max(20, scaledH),
+        rotation: angle,
+        text: obj.text ?? '',
+        fontSize: obj.fontSize ?? 16,
+        color: fill === 'transparent' || fill === 'none' ? '#000000' : fill,
+        fontWeight: String(obj.fontWeight) === 'bold' || Number(obj.fontWeight) >= 700 ? 'bold' : 'normal',
+        fontStyle: obj.fontStyle === 'italic' ? 'italic' : 'normal',
+        textAlign: (obj.textAlign === 'center' || obj.textAlign === 'right' || obj.textAlign === 'left') ? obj.textAlign : 'left',
+        opacity,
+      });
+      continue;
+    }
+
+    if (lowerType === 'image') {
+      let resolvedSrc = '';
+      if (obj.src) {
+        const trimmedSrc = obj.src.trim();
+        if (trimmedSrc.startsWith('data:')) {
+          const cached = localFileMap?.get(trimmedSrc) || localFileMap?.get(obj.src);
+          if (cached) {
+            resolvedSrc = cached;
+          } else {
+            const extension = trimmedSrc.match(/data:image\/([a-z]+);base64/)?.[1] || 'png';
+            const filename = `fabric_inline_img_${Date.now()}_${nextIdRef.current}.${extension}`;
+            resolvedSrc = await saveBase64ToTempFile(trimmedSrc, filename);
+            if (localFileMap) {
+              localFileMap.set(trimmedSrc, resolvedSrc);
+            }
+          }
+        } else {
+          resolvedSrc = resolveRelativeUrl(baseUrl, obj.src);
+        }
+      }
+      items.push({
+        id: `fab_img_${nextIdRef.current++}`,
+        type: 'image',
+        x,
+        y,
+        width: Math.max(10, scaledW),
+        height: Math.max(10, scaledH),
+        rotation: angle,
+        uri: resolvedSrc,
+        opacity,
+        borderRadius: 0,
+      });
+      continue;
+    }
+
+    if (lowerType === 'rect') {
+      items.push({
+        id: `fab_rect_${nextIdRef.current++}`,
+        type: 'shape',
+        shapeType: 'rect',
+        x,
+        y,
+        width: Math.max(2, scaledW),
+        height: Math.max(2, scaledH),
+        rotation: angle,
+        color: fill,
+        strokeColor: stroke,
+        strokeWidth,
+        borderRadius: obj.rx ?? 0,
+        opacity,
+      });
+      continue;
+    }
+
+    if (lowerType === 'circle' || lowerType === 'ellipse') {
+      items.push({
+        id: `fab_circ_${nextIdRef.current++}`,
+        type: 'shape',
+        shapeType: 'circle',
+        x,
+        y,
+        width: Math.max(2, scaledW),
+        height: Math.max(2, scaledH),
+        rotation: angle,
+        color: fill,
+        strokeColor: stroke,
+        strokeWidth,
+        opacity,
+      });
+      continue;
+    }
+
+    if (lowerType === 'triangle') {
+      items.push({
+        id: `fab_tri_${nextIdRef.current++}`,
+        type: 'shape',
+        shapeType: 'triangle',
+        x,
+        y,
+        width: Math.max(2, scaledW),
+        height: Math.max(2, scaledH),
+        rotation: angle,
+        color: fill,
+        strokeColor: stroke,
+        strokeWidth,
+        opacity,
+      });
+      continue;
+    }
+
+    if (lowerType === 'line') {
+      items.push({
+        id: `fab_line_${nextIdRef.current++}`,
+        type: 'shape',
+        shapeType: 'line',
+        x,
+        y,
+        width: Math.max(2, scaledW),
+        height: Math.max(20, scaledH),
+        rotation: angle,
+        color: fill !== 'transparent' ? fill : stroke,
+        strokeWidth: Math.max(1, strokeWidth),
+        opacity,
+      });
+      continue;
+    }
+
+    if (lowerType === 'path' && Array.isArray(obj.path) && obj.path.length > 0) {
+      const pathD = fabricPathToString(obj.path);
+      items.push({
+        id: `fab_path_${nextIdRef.current++}`,
+        type: 'shape',
+        shapeType: 'path',
+        x,
+        y,
+        width: Math.max(2, scaledW),
+        height: Math.max(2, scaledH),
+        rotation: angle,
+        color: fill,
+        strokeColor: stroke,
+        strokeWidth,
+        pathD,
+        pathViewBox: `${x} ${y} ${scaledW} ${scaledH}`,
+        opacity,
+        strokeDasharray: Array.isArray(obj.strokeDashArray) ? obj.strokeDashArray.join(' ') : undefined,
+      });
+      continue;
+    }
+
+    if (lowerType === 'polygon' || lowerType === 'polyline') {
+      if (Array.isArray(obj.points) && obj.points.length > 0) {
+        const xs = obj.points.map((p: any) => p.x);
+        const ys = obj.points.map((p: any) => p.y);
+        const minX = Math.min(...xs);
+        const minY = Math.min(...ys);
+
+        const pathParts = obj.points.map((p: any, i: number) => {
+          const relX = p.x - minX;
+          const relY = p.y - minY;
+          return `${i === 0 ? 'M' : 'L'} ${relX} ${relY}`;
+        });
+        if (lowerType === 'polygon') {
+          pathParts.push('Z');
+        }
+        const pathD = pathParts.join(' ');
+
+        items.push({
+          id: `fab_poly_${nextIdRef.current++}`,
+          type: 'shape',
+          shapeType: 'path',
+          x,
+          y,
+          width: Math.max(2, scaledW),
+          height: Math.max(2, scaledH),
+          rotation: angle,
+          color: fill,
+          strokeColor: stroke,
+          strokeWidth,
+          pathD,
+          pathViewBox: `0 0 ${obj.width ?? scaledW} ${obj.height ?? scaledH}`,
+          opacity,
+          strokeDasharray: Array.isArray(obj.strokeDashArray) ? obj.strokeDashArray.join(' ') : undefined,
+        });
+      }
+      continue;
+    }
+    // Unknown or unsupported Fabric type — skip
+  }
+
+  return items;
+};
 
 // Types
 type Item = {
@@ -90,6 +459,7 @@ type Item = {
   color?: string; // Fill Color
   fontWeight?: 'normal' | 'bold';
   fontStyle?: 'normal' | 'italic';
+  textAlign?: 'left' | 'center' | 'right';
   shapeType?: 'rect' | 'circle' | 'triangle' | 'star' | 'line' | 'path';
   strokeColor?: string;
   strokeWidth?: number;
@@ -184,16 +554,32 @@ const sliderStyles = StyleSheet.create({
 interface MovableProps {
   item: Item;
   selected: boolean;
+  zIndex: number;
+  canvasScaleX: number;
+  canvasScaleY: number;
   onSelect: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Item>) => void;
   onCommitHistory: () => void;
   onDelete: (id: string) => void;
 }
 
-function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete }: MovableProps) {
+function Movable({ item, selected, zIndex, canvasScaleX, canvasScaleY, onSelect, onUpdate, onCommitHistory, onDelete }: MovableProps) {
   const startPosition = useRef({ x: 0, y: 0 });
   const startSize = useRef({ width: 0, height: 0 });
   const startRotation = useRef(0);
+
+  // Use a single uniform scale to avoid double-scaling issues.
+  const canvasUniformScale = Math.min(canvasScaleX, canvasScaleY);
+  const fontScale = canvasUniformScale;
+
+  const canvasScaleRef = useRef({ x: canvasUniformScale, y: canvasUniformScale });
+  useEffect(() => {
+    canvasScaleRef.current = { x: canvasUniformScale, y: canvasUniformScale };
+  }, [canvasUniformScale]);
+
+  const scaledWidth = item.width * canvasUniformScale;
+  const scaledHeight = item.height * canvasUniformScale;
+
 
   const dragPanResponder = useRef(
     PanResponder.create({
@@ -205,8 +591,8 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
       },
       onPanResponderMove: (_, gestureState) => {
         onUpdate(item.id, {
-          x: startPosition.current.x + gestureState.dx,
-          y: startPosition.current.y + gestureState.dy,
+          x: startPosition.current.x + gestureState.dx / canvasScaleRef.current.x,
+          y: startPosition.current.y + gestureState.dy / canvasScaleRef.current.y,
         });
       },
       onPanResponderRelease: () => {
@@ -227,8 +613,8 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
       onPanResponderMove: (e, gestureState) => {
         e.stopPropagation();
         onUpdate(item.id, {
-          width: Math.max(30, startSize.current.width + gestureState.dx),
-          height: Math.max(30, startSize.current.height + gestureState.dy),
+          width: Math.max(30, startSize.current.width + gestureState.dx / canvasScaleRef.current.x),
+          height: Math.max(30, startSize.current.height + gestureState.dy / canvasScaleRef.current.y),
         });
       },
       onPanResponderRelease: () => {
@@ -286,18 +672,18 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
   };
 
   const renderShape = () => {
-    const w = item.width;
-    const h = item.height;
-    const sw = item.strokeWidth ?? 0;
+    const w = scaledWidth;
+    const h = scaledHeight;
+    const sw = (item.strokeWidth ?? 0) * fontScale;
     const sc = item.strokeColor ?? '#000000';
     const fc = item.color ?? '#df103f';
-    const rx = item.borderRadius ?? 0;
+    const rx = (item.borderRadius ?? 0) * fontScale;
 
     switch (item.shapeType) {
       case 'rect':
         return (
           <Svg width={w} height={h}>
-            <Rect x={sw / 2} y={sw / 2} width={w - sw} height={h - sw} fill={fc} stroke={sc} strokeWidth={sw} rx={rx} />
+            <Rect x={sw / 2} y={sw / 2} width={w - sw} height={h - sw} fill={fc} stroke={sc} strokeWidth={sw} rx={rx > 0 ? rx : undefined} />
           </Svg>
         );
       case 'circle': {
@@ -344,12 +730,12 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
       style={[
         styles.movable,
         {
-          left: item.x,
-          top: item.y,
-          width: item.width,
-          height: item.height,
+          left: item.x * canvasUniformScale,
+          top: item.y * canvasUniformScale,
+          width: scaledWidth,
+          height: scaledHeight,
           transform: [{ rotate: `${item.rotation}deg` }],
-          zIndex: selected ? 999 : 1,
+          zIndex,
         },
       ]}
     >
@@ -357,15 +743,16 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
         {item.type === 'text' && (
           <RNText
             style={{
-              fontSize: item.fontSize ?? 16,
+              fontSize: (item.fontSize ?? 16) * fontScale,
+              lineHeight: Math.max(1, (item.fontSize ?? 16) * fontScale * 1.1),
               color: item.color ?? '#000000',
               fontWeight: item.fontWeight ?? 'normal',
               fontStyle: item.fontStyle ?? 'normal',
               width: '100%',
               height: '100%',
-              textAlign: 'center',
+              textAlign: item.textAlign ?? 'center',
             }}
-            numberOfLines={0}
+            numberOfLines={undefined}
           >
             {item.text}
           </RNText>
@@ -377,10 +764,10 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
             style={{
               width: '100%',
               height: '100%',
-              borderRadius: item.borderRadius ?? 0,
+              borderRadius: (item.borderRadius ?? 0) * fontScale,
               opacity: item.opacity ?? 1,
             }}
-            resizeMode="cover"
+            resizeMode="contain"
           />
         )}
       </View>
@@ -388,7 +775,7 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
       {selected && (
         <>
           <View style={styles.selectionOutline} pointerEvents="none" />
-          <View style={[styles.handle, styles.rotateHandle, { left: item.width / 2 - 12, top: -32 }]} {...rotatePanResponder.panHandlers}>
+          <View style={[styles.handle, styles.rotateHandle, { left: scaledWidth / 2 - 12, top: -32 }]} {...rotatePanResponder.panHandlers}>
             <RotateIcon size={12} color="#fff" />
           </View>
           <TouchableOpacity style={[styles.handle, styles.deleteHandle, { right: -12, top: -12 }]} onPress={() => onDelete(item.id)}>
@@ -405,6 +792,7 @@ function Movable({ item, selected, onSelect, onUpdate, onCommitHistory, onDelete
 
 // Main Canvas Editor Component
 export default function SvgEditor({ route, navigation, category }: { route?: any; navigation?: any; category?: any }) {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const svgUrl: string | undefined = route?.params?.svgUrl;
   const initialSvgText: string | undefined = route?.params?.svgText;
 
@@ -419,8 +807,35 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
   const [templates, setTemplates] = useState<Template[]>([]);
   const [subCategory, setSubCategory] = useState<string | null>(null);
   const [showSocialModal, setShowSocialModal] = useState(false);
+  const [canvasMetrics, setCanvasMetrics] = useState<CanvasMetrics>(DEFAULT_CANVAS_METRICS);
   // Toolbar & Panels state
   const [activeTab, setActiveTab] = useState<'templates' | 'add' | 'styles' | 'layers' | 'canvas'>('templates');
+  const [editorPanelHidden, setEditorPanelHidden] = useState(false);
+  const [canvasArea, setCanvasArea] = useState({
+    width: windowWidth,
+    height: Math.max(0, windowHeight - HEADER_HEIGHT),
+  });
+
+  const canvasFrame = useMemo(() => {
+    const availableWidth = Math.max(1, canvasArea.width);
+    const availableHeight = Math.max(1, canvasArea.height);
+    const scale = Math.min(availableWidth / canvasMetrics.width, availableHeight / canvasMetrics.height);
+    const width = Math.max(1, Math.floor(canvasMetrics.width * scale));
+    const height = Math.max(1, Math.floor(canvasMetrics.height * scale));
+    return { width, height };
+  }, [canvasArea.height, canvasArea.width, canvasMetrics.height, canvasMetrics.width]);
+  const canvasScaleX = canvasFrame.width / canvasMetrics.width;
+  const canvasScaleY = canvasFrame.height / canvasMetrics.height;
+
+  const handleCanvasAreaLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setCanvasArea((prev) => {
+      if (Math.round(prev.width) === Math.round(width) && Math.round(prev.height) === Math.round(height)) {
+        return prev;
+      }
+      return { width, height };
+    });
+  };
 
   // Undo/Redo History
   const [history, setHistory] = useState<Item[][]>([[]]);
@@ -458,14 +873,57 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
   useEffect(() => {
     let mounted = true;
     async function load() {
-      if (svgText) return;
-      if (!svgUrl) return;
+      if (!initialSvgText && !svgUrl) return;
+
       setLoading(true);
       try {
-        const res = await fetch(svgUrl);
-        const text = await res.text();
+        let fabricJSON: any;
+        let processedCleanSvgText: string | null = null;
+        let localFileMap = new Map<string, string>();
+
+        if (svgUrl) {
+          const res = await svgUrlToFabricJSON(svgUrl);
+          fabricJSON = res.fabricJSON;
+          const resolvedCleanSvgUrl = resolveRelativeUrl(svgUrl, res.svgUrl);
+          const bgRes = await fetch(resolvedCleanSvgUrl);
+          const rawSvgText = bgRes.ok ? await bgRes.text() : null;
+          const processed = await processSvgBase64Images(rawSvgText);
+          processedCleanSvgText = processed.cleanSvgText;
+          localFileMap = processed.localFileMap;
+        } else if (initialSvgText) {
+          fabricJSON = await svgStringToFabricJSON(initialSvgText);
+          const processed = await processSvgBase64Images(initialSvgText);
+          processedCleanSvgText = processed.cleanSvgText;
+          localFileMap = processed.localFileMap;
+        }
+
+        if (!fabricJSON) throw new Error('No Fabric JSON returned');
+
+        // Derive canvas dimensions from the Fabric objects bounding box
+        let maxRight = 400;
+        let maxBottom = 400;
+        for (const obj of fabricJSON.objects) {
+          const scaleX = obj.scaleX ?? 1;
+          const scaleY = obj.scaleY ?? 1;
+          const w = (obj.width ?? 0) * scaleX;
+          const h = (obj.height ?? 0) * scaleY;
+          const isCenterOrigin = (obj.originX ?? 'left') === 'center';
+          const right = isCenterOrigin ? (obj.left ?? 0) + w / 2 : (obj.left ?? 0) + w;
+          const bottom = isCenterOrigin ? (obj.top ?? 0) + h / 2 : (obj.top ?? 0) + h;
+          if (right > maxRight) maxRight = right;
+          if (bottom > maxBottom) maxBottom = bottom;
+        }
+        const svgMetrics: CanvasMetrics = { width: maxRight, height: maxBottom, minX: 0, minY: 0 };
+
+        // Map Fabric objects → editable items
+        const fabricItems = await mapFabricObjectsToItems(fabricJSON.objects, nextId, svgUrl || null, localFileMap);
+
         if (!mounted) return;
-        setSvgText(text);
+        setCanvasMetrics(svgMetrics);
+        setSvgText(null);
+        setItems(fabricItems);
+        setHistory([fabricItems]);
+        setHistoryIndex(0);
       } catch (e: any) {
         setError(e?.message || 'Failed to load SVG template');
       } finally {
@@ -476,7 +934,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     return () => {
       mounted = false;
     };
-  }, [svgUrl, svgText]);
+  }, [svgUrl, initialSvgText]);
 
   // Selected item object lookup
   const selectedItem = useMemo(() => {
@@ -526,8 +984,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     const newItem: Item = {
       id,
       type: 'text',
-      x: (CANVAS_SIZE - 200) / 2,
-      y: (CANVAS_SIZE - 60) / 2,
+      x: (canvasMetrics.width - 200) / 2,
+      y: (canvasMetrics.height - 60) / 2,
       width: 200,
       height: 60,
       rotation: 0,
@@ -555,8 +1013,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
       id,
       type: 'shape',
       shapeType,
-      x: (CANVAS_SIZE - 100) / 2,
-      y: (CANVAS_SIZE - 100) / 2,
+      x: (canvasMetrics.width - 100) / 2,
+      y: (canvasMetrics.height - 100) / 2,
       width: 100,
       height: shapeType === 'line' ? 20 : 100,
       rotation: 0,
@@ -585,8 +1043,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     const newItem: Item = {
       id,
       type: 'image',
-      x: (CANVAS_SIZE - 120) / 2,
-      y: (CANVAS_SIZE - 120) / 2,
+      x: (canvasMetrics.width - 120) / 2,
+      y: (canvasMetrics.height - 120) / 2,
       width: 120,
       height: 120,
       rotation: 0,
@@ -680,13 +1138,14 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     setHistoryIndex(currentHist.length - 1);
   };
 
-  // Load SVG Template
+  // Load SVG Template via Fabric.js JSON API
   const handleLoadTemplate = (tmpl: Template | null) => {
     const performLoad = async () => {
       if (!tmpl) {
         setSvgText(null);
         setItems([]);
         setBgColor('#FFFFFF');
+        setCanvasMetrics(DEFAULT_CANVAS_METRICS);
         setSelected(null);
         setActiveTemplateId(null);
         setHistory([[]]);
@@ -694,289 +1153,51 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         return;
       }
 
-      // load svg from template.svg_url
       if (!tmpl.svg_url) {
-        Alert.alert('Template missing', 'This template has no svg URL available.');
+        Alert.alert('Template missing', 'This template has no SVG URL available.');
         return;
       }
 
       setLoading(true);
       try {
-        const res = await fetch(tmpl.svg_url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-
-        // Try to parse common SVG elements into editable overlay items
-        const parseAttrs = (s: string) => {
-          const attrs: Record<string, string> = {};
-          s.replace(/([a-zA-Z0-9:_-]+)=("|')([^"']*)("|')/g, (_m, k, _q, v) => {
-            attrs[k] = v;
-            return '';
-          });
-          return attrs;
-        };
-
-        const itemsFromSvg: Item[] = [];
-
-        // Determine svg root viewBox / dimensions so we can map coordinates to the editor canvas
-        const svgRootRe = /<svg\b([^>]*)>/i;
-        const svgRootMatch = svgRootRe.exec(text);
-        let vbMinX = 0;
-        let vbMinY = 0;
-        let svgW = 400;
-        let svgH = 400;
-        if (svgRootMatch) {
-          const rootAttrs = parseAttrs(svgRootMatch[1]);
-          const vbRaw = rootAttrs.viewBox || rootAttrs.viewbox || rootAttrs.viewBOX;
-          if (vbRaw) {
-            const parts = vbRaw.trim().split(/[,\s]+/).map(Number).filter(n => !isNaN(n));
-            if (parts.length >= 4) {
-              vbMinX = parts[0];
-              vbMinY = parts[1];
-              svgW = parts[2] || svgW;
-              svgH = parts[3] || svgH;
-            }
-          } else {
-            const wRaw = parseFloat(rootAttrs.width || '0');
-            const hRaw = parseFloat(rootAttrs.height || '0');
-            if (wRaw > 0 && hRaw > 0) {
-              svgW = wRaw;
-              svgH = hRaw;
-            }
-          }
+        // Call the Fabric.js conversion API
+        const { fabricJSON } = await svgUrlToFabricJSON(tmpl.svg_url);
+        console.log("fabricJSON", fabricJSON, tmpl.svg_url);
+        // Derive canvas dimensions from the Fabric objects bounding box
+        let maxRight = 400;
+        let maxBottom = 400;
+        for (const obj of fabricJSON.objects) {
+          const scaleX = obj.scaleX ?? 1;
+          const scaleY = obj.scaleY ?? 1;
+          const w = (obj.width ?? 0) * scaleX;
+          const h = (obj.height ?? 0) * scaleY;
+          const isCenterOrigin = (obj.originX ?? 'left') === 'center';
+          const right = isCenterOrigin ? (obj.left ?? 0) + w / 2 : (obj.left ?? 0) + w;
+          const bottom = isCenterOrigin ? (obj.top ?? 0) + h / 2 : (obj.top ?? 0) + h;
+          if (right > maxRight) maxRight = right;
+          if (bottom > maxBottom) maxBottom = bottom;
         }
+        const svgMetrics: CanvasMetrics = { width: maxRight, height: maxBottom, minX: 0, minY: 0 };
 
-        // Map SVG coordinates -> canvas coordinates (fit within CANVAS_SIZE)
-        const scaleX = CANVAS_SIZE / svgW;
-        const scaleY = CANVAS_SIZE / svgH;
-        const scale = Math.min(scaleX, scaleY);
-        const offsetX = (CANVAS_SIZE - svgW * scale) / 2;
-        const offsetY = (CANVAS_SIZE - svgH * scale) / 2;
+        // Use the clean SVG URL (returned by API) as the background layer and cache base64 images
+        const bgRes = await fetch(tmpl.svg_url);
+        const rawSvgText = bgRes.ok ? await bgRes.text() : null;
+        const { cleanSvgText, localFileMap } = await processSvgBase64Images(rawSvgText);
 
-        const mapX = (x: number) => Math.round((x - vbMinX) * scale + offsetX);
-        const mapY = (y: number) => Math.round((y - vbMinY) * scale + offsetY);
-        const mapW = (w: number) => Math.max(2, Math.round(w * scale));
-        const mapH = (h: number) => Math.max(2, Math.round(h * scale));
-        const getPathBounds = (d: string) => {
-          const tokens = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || [];
-          let i = 0;
-          let command = '';
-          let x = 0;
-          let y = 0;
-          let startX = 0;
-          let startY = 0;
-          let minX = Number.POSITIVE_INFINITY;
-          let minY = Number.POSITIVE_INFINITY;
-          let maxX = Number.NEGATIVE_INFINITY;
-          let maxY = Number.NEGATIVE_INFINITY;
+        // Map Fabric objects → editable items
+        const fabricItems = await mapFabricObjectsToItems(fabricJSON.objects, nextId, tmpl.svg_url, localFileMap);
 
-          const isCommand = (token: string) => /^[a-zA-Z]$/.test(token);
-          const hasNumber = () => i < tokens.length && !isCommand(tokens[i]);
-          const read = () => Number(tokens[i++]);
-          const include = (px: number, py: number) => {
-            if (!Number.isFinite(px) || !Number.isFinite(py)) return;
-            minX = Math.min(minX, px);
-            minY = Math.min(minY, py);
-            maxX = Math.max(maxX, px);
-            maxY = Math.max(maxY, py);
-          };
-
-          while (i < tokens.length) {
-            if (isCommand(tokens[i])) {
-              command = tokens[i++];
-            }
-
-            const lower = command.toLowerCase();
-            const relative = command === lower;
-
-            if (lower === 'm' || lower === 'l' || lower === 't') {
-              while (hasNumber() && i + 1 < tokens.length) {
-                const nx = read();
-                const ny = read();
-                x = relative ? x + nx : nx;
-                y = relative ? y + ny : ny;
-                if (lower === 'm') {
-                  startX = x;
-                  startY = y;
-                  command = relative ? 'l' : 'L';
-                }
-                include(x, y);
-              }
-            } else if (lower === 'h') {
-              while (hasNumber()) {
-                const nx = read();
-                x = relative ? x + nx : nx;
-                include(x, y);
-              }
-            } else if (lower === 'v') {
-              while (hasNumber()) {
-                const ny = read();
-                y = relative ? y + ny : ny;
-                include(x, y);
-              }
-            } else if (lower === 'c') {
-              while (hasNumber() && i + 5 < tokens.length) {
-                const points = [read(), read(), read(), read(), read(), read()];
-                for (let p = 0; p < points.length; p += 2) {
-                  const px = relative ? x + points[p] : points[p];
-                  const py = relative ? y + points[p + 1] : points[p + 1];
-                  include(px, py);
-                }
-                x = relative ? x + points[4] : points[4];
-                y = relative ? y + points[5] : points[5];
-              }
-            } else if (lower === 's' || lower === 'q') {
-              while (hasNumber() && i + 3 < tokens.length) {
-                const points = [read(), read(), read(), read()];
-                for (let p = 0; p < points.length; p += 2) {
-                  const px = relative ? x + points[p] : points[p];
-                  const py = relative ? y + points[p + 1] : points[p + 1];
-                  include(px, py);
-                }
-                x = relative ? x + points[2] : points[2];
-                y = relative ? y + points[3] : points[3];
-              }
-            } else if (lower === 'a') {
-              while (hasNumber() && i + 6 < tokens.length) {
-                const rx = read();
-                const ry = read();
-                read(); read(); read();
-                const nx = read();
-                const ny = read();
-                x = relative ? x + nx : nx;
-                y = relative ? y + ny : ny;
-                include(x - rx, y - ry);
-                include(x + rx, y + ry);
-              }
-            } else if (lower === 'z') {
-              x = startX;
-              y = startY;
-              include(x, y);
-            } else {
-              break;
-            }
-          }
-
-          if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
-            return null;
-          }
-
-          return {
-            x: minX,
-            y: minY,
-            width: Math.max(1, maxX - minX),
-            height: Math.max(1, maxY - minY),
-          };
-        };
-
-        // TEXT nodes
-        let m: RegExpExecArray | null;
-        const textRe = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
-        while ((m = textRe.exec(text))) {
-          const attrs = parseAttrs(m[1]);
-          const content = m[2].replace(/<[^>]+>/g, '').trim();
-          const fontSize = parseFloat(attrs['font-size'] || attrs['fontSize'] || '20') || 20;
-          const rawX = parseFloat(attrs.x || attrs['x'] || '') || svgW / 2;
-          const rawY = parseFloat(attrs.y || attrs['y'] || '') || svgH / 2;
-          const x = mapX(rawX);
-          const y = mapY(rawY);
-          const color = attrs.fill || '#000000';
-          const mappedFont = Math.max(8, Math.round(fontSize * scale));
-          const id = `svg_text_${nextId.current++}`;
-          itemsFromSvg.push({ id, type: 'text', x, y, width: Math.max(40, (content.length || 6) * (mappedFont * 0.5)), height: mappedFont * 1.4, rotation: 0, text: content, fontSize: mappedFont, color });
-        }
-
-        // IMAGE nodes
-        const imgRe = /<image\b([^>]*)\/?>(?:<\/image>)?/gi;
-        while ((m = imgRe.exec(text))) {
-          const attrs = parseAttrs(m[1]);
-          const href = attrs.href || attrs['xlink:href'] || attrs.xlinkHref || attrs.src;
-          if (!href) continue;
-          const rawX = parseFloat(attrs.x || '0') || 0;
-          const rawY = parseFloat(attrs.y || '0') || 0;
-          const rawW = parseFloat(attrs.width || '120') || 120;
-          const rawH = parseFloat(attrs.height || '120') || 120;
-          const x = mapX(rawX);
-          const y = mapY(rawY);
-          const w = mapW(rawW);
-          const h = mapH(rawH);
-          const id = `svg_img_${nextId.current++}`;
-          itemsFromSvg.push({ id, type: 'image', x, y, width: w, height: h, rotation: 0, uri: href });
-        }
-
-        // RECT nodes
-        const rectRe = /<rect\b([^>]*)\/?>(?:<\/rect>)?/gi;
-        while ((m = rectRe.exec(text))) {
-          const attrs = parseAttrs(m[1]);
-          const rawX = parseFloat(attrs.x || '0') || 0;
-          const rawY = parseFloat(attrs.y || '0') || 0;
-          const rawW = parseFloat(attrs.width || '100') || 100;
-          const rawH = parseFloat(attrs.height || '100') || 100;
-          const fill = attrs.fill || '#df103f';
-          const rx = parseFloat(attrs.rx || '0') || 0;
-          const x = mapX(rawX);
-          const y = mapY(rawY);
-          const w = mapW(rawW);
-          const h = mapH(rawH);
-          const id = `svg_rect_${nextId.current++}`;
-          itemsFromSvg.push({ id, type: 'shape', shapeType: 'rect', x, y, width: w, height: h, rotation: 0, color: fill, borderRadius: Math.round(rx * scale) });
-        }
-
-        // CIRCLE nodes
-        const circRe = /<circle\b([^>]*)\/?>(?:<\/circle>)?/gi;
-        while ((m = circRe.exec(text))) {
-          const attrs = parseAttrs(m[1]);
-          const cx = parseFloat(attrs.cx || '0') || 0;
-          const cy = parseFloat(attrs.cy || '0') || 0;
-          const r = parseFloat(attrs.r || '10') || 10;
-          const id = `svg_circ_${nextId.current++}`;
-          const x = mapX(cx - r);
-          const y = mapY(cy - r);
-          const d = mapW(r * 2);
-          itemsFromSvg.push({ id, type: 'shape', shapeType: 'circle', x, y, width: d, height: d, rotation: 0, color: attrs.fill || '#df103f' });
-        }
-
-        // PATH nodes -> store as path item (editable limitedly)
-        const pathRe = /<path\b([^>]*)\/?>/gi;
-        while ((m = pathRe.exec(text))) {
-          const attrs = parseAttrs(m[1]);
-          const d = attrs.d || '';
-          if (!d) continue;
-          const bounds = getPathBounds(d);
-          if (!bounds) continue;
-          const id = `svg_path_${nextId.current++}`;
-          itemsFromSvg.push({
-            id,
-            type: 'shape',
-            shapeType: 'path',
-            x: mapX(bounds.x),
-            y: mapY(bounds.y),
-            width: mapW(bounds.width),
-            height: mapH(bounds.height),
-            rotation: 0,
-            color: attrs.fill || '#df103f',
-            pathD: d,
-            pathViewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`,
-          });
-        }
-
-        // If we parsed items, use them as editable overlays; otherwise keep svgText
-        if (itemsFromSvg.length > 0) {
-          setSvgText(null);
-          setItems(itemsFromSvg);
-        } else {
-          setSvgText(text);
-          setItems([]);
-        }
-
+        setSvgText(null);
+        setItems(fabricItems);
         setBgColor('#FFFFFF');
+        setCanvasMetrics(svgMetrics);
         setSelected(null);
         setActiveTemplateId(tmpl.id);
 
-        setHistory([itemsFromSvg.length > 0 ? itemsFromSvg : []]);
+        setHistory([fabricItems]);
         setHistoryIndex(0);
       } catch (e: any) {
-        Alert.alert('Failed to load template', e?.message || 'Could not fetch SVG');
+        Alert.alert('Failed to load template', e?.message || 'Could not load SVG');
       } finally {
         setLoading(false);
       }
@@ -1012,6 +1233,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
           setSvgText(null);
           setSelected(null);
           setBgColor('#FFFFFF');
+          setCanvasMetrics(DEFAULT_CANVAS_METRICS);
           setActiveTemplateId(null);
           setHistory([[]]);
           setHistoryIndex(0);
@@ -1022,13 +1244,14 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
 
   // Standalone SVG Exporter
   const handleExportSvg = () => {
-    const widthRatio = 400 / CANVAS_SIZE; // Scaling factor relative to 400px base space
+    const exportOffsetX = svgText ? canvasMetrics.minX : 0;
+    const exportOffsetY = svgText ? canvasMetrics.minY : 0;
 
     const itemToSvgTag = (it: Item) => {
-      const x = it.x * widthRatio;
-      const y = it.y * widthRatio;
-      const w = it.width * widthRatio;
-      const h = it.height * widthRatio;
+      const x = it.x + exportOffsetX;
+      const y = it.y + exportOffsetY;
+      const w = it.width;
+      const h = it.height;
       const rot = it.rotation;
       const cx = x + w / 2;
       const cy = y + h / 2;
@@ -1038,7 +1261,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
 
       switch (it.type) {
         case 'text': {
-          const fs = (it.fontSize ?? 16) * widthRatio;
+          const fs = it.fontSize ?? 16;
           const fw = it.fontWeight === 'bold' ? ' font-weight="bold"' : '';
           const fst = it.fontStyle === 'italic' ? ' font-style="italic"' : '';
           const textEscaped = (it.text ?? '')
@@ -1047,15 +1270,16 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&apos;');
-          return `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" font-size="${fs.toFixed(1)}" fill="${fc}"${fw}${fst} text-anchor="middle" dominant-baseline="central"${transform} font-family="System">${textEscaped}</text>`;
+          const ta = it.textAlign === 'left' ? 'start' : it.textAlign === 'right' ? 'end' : 'middle';
+          return `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" font-size="${fs.toFixed(1)}" fill="${fc}"${fw}${fst} text-anchor="${ta}" dominant-baseline="central"${transform} font-family="System">${textEscaped}</text>`;
         }
         case 'image':
           return `<image x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" href="${it.uri}"${opacityAttr}${transform}/>`;
         case 'shape': {
-          const sw = (it.strokeWidth ?? 0) * widthRatio;
+          const sw = it.strokeWidth ?? 0;
           const sc = it.strokeColor ?? '#000000';
           const strokeAttr = sw > 0 ? ` stroke="${sc}" stroke-width="${sw.toFixed(1)}"` : '';
-          const rxVal = (it.borderRadius ?? 0) * widthRatio;
+          const rxVal = it.borderRadius ?? 0;
 
           if (it.shapeType === 'rect') {
             const rxAttr = rxVal > 0 ? ` rx="${rxVal.toFixed(1)}"` : '';
@@ -1112,8 +1336,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         finalSvg = `${svgText}\n<!-- Overlays -->\n${itemTags}`;
       }
     } else {
-      finalSvg = `<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <rect width="400" height="400" fill="${bgColor}"/>
+      finalSvg = `<svg width="${canvasMetrics.width}" height="${canvasMetrics.height}" viewBox="0 0 ${canvasMetrics.width} ${canvasMetrics.height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <rect width="${canvasMetrics.width}" height="${canvasMetrics.height}" fill="${bgColor}"/>
   <!-- User Added Overlays -->
   ${itemTags}
 </svg>`;
@@ -1140,6 +1364,18 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
           </TouchableOpacity>
           <Title style={styles.headerTitle}>{category}</Title>
           <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={() => setEditorPanelHidden((hidden) => !hidden)}
+              style={styles.actionIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={editorPanelHidden ? 'Show bottom tools' : 'Hide bottom tools'}
+            >
+              {editorPanelHidden ? (
+                <ChevronUpIcon size={18} color="#0f172a" />
+              ) : (
+                <ChevronDownIcon size={18} color="#0f172a" />
+              )}
+            </TouchableOpacity>
             <TouchableOpacity onPress={handleUndo} disabled={historyIndex <= 0} style={[styles.actionIconBtn, historyIndex <= 0 && styles.disabledBtn]}>
               <UndoIcon size={18} color={historyIndex <= 0 ? '#cbd5e1' : '#0f172a'} />
             </TouchableOpacity>
@@ -1157,8 +1393,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         </View>
 
         {/* Canvas Editing Space */}
-        <View style={styles.canvasContainer}>
-          <View style={[styles.canvasWrapper, { width: CANVAS_SIZE, height: CANVAS_SIZE }]}>
+        <View style={styles.canvasContainer} onLayout={handleCanvasAreaLayout}>
+          <View style={[styles.canvasWrapper, { width: canvasFrame.width, height: canvasFrame.height }]}>
             {/* Checkerboard Background */}
             <View style={styles.checkerboard} />
 
@@ -1166,23 +1402,31 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
             <TouchableOpacity
               activeOpacity={1}
               onPress={() => setSelected(null)}
-              style={[styles.artboard, { width: CANVAS_SIZE, height: CANVAS_SIZE, backgroundColor: bgColor }]}
+              style={[styles.artboard, { width: canvasFrame.width, height: canvasFrame.height, backgroundColor: bgColor }]}
             >
               {loading ? (
                 <ActivityIndicator size="large" color="#df103f" style={StyleSheet.absoluteFillObject} />
               ) : error ? (
                 <Text style={styles.errorText}>{error}</Text>
               ) : svgText ? (
-                <SvgXml xml={svgText} width="100%" height="100%" />
+                <SvgXml
+                  xml={preprocessSvg(svgText) || ''}
+                  width={canvasFrame.width}
+                  height={canvasFrame.height}
+                  style={{ position: 'absolute', top: 0, left: 0 }}
+                />
               ) : null}
 
               {/* Elements Overlay Layer */}
               <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-                {items.map((it) => (
+                {items.map((it, index) => (
                   <Movable
                     key={it.id}
                     item={it}
                     selected={selected === it.id}
+                    zIndex={index + 1}
+                    canvasScaleX={canvasScaleX}
+                    canvasScaleY={canvasScaleY}
                     onSelect={setSelected}
                     onUpdate={handleUpdateItem}
                     onCommitHistory={commitHistory}
@@ -1195,7 +1439,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         </View>
 
         {/* Style & Element Toolbar panels */}
-        <View style={styles.editorPanel}>
+        {!editorPanelHidden && <View style={styles.editorPanel}>
           {/* Active Panel Content */}
           <View style={styles.panelBody}>
             {activeTab === 'templates' && (
@@ -1633,7 +1877,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
               <Text style={[styles.tabLabel, activeTab === 'canvas' && styles.activeTabLabel]}>Canvas</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </View>}
         {/* Social Media Subcategory Modal */}
         <Portal>
           <Modal visible={showSocialModal} onDismiss={() => setShowSocialModal(false)} contentContainerStyle={styles.socialModal}>
@@ -1669,8 +1913,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
 
 // StyleSheet
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fafc' },
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  safe: { flex: 1, backgroundColor: THEME_COLORS.primary },
+  container: { flex: 1, backgroundColor: '#ffffffff', position: 'relative' },
 
   // Header styles
   header: {
@@ -1710,17 +1954,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
     backgroundColor: '#f1f5f9',
   },
   canvasWrapper: {
     position: 'relative',
-    borderRadius: 16,
-    elevation: 8,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
   },
@@ -1795,6 +2032,10 @@ const styles = StyleSheet.create({
 
   // Bottom Control Panel styling
   editorPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     height: 290,
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 20,
@@ -1804,6 +2045,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
+    zIndex: 20,
   },
   panelBody: { flex: 1 },
   panelContent: { flex: 1, padding: 16 },
