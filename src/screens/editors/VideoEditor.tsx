@@ -476,6 +476,16 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     return 'mp4';
   };
 
+  // Refs to avoid recreating callbacks on state changes (preventing ExoPlayer reloads)
+  const currentTimeRef = useRef(0);
+  currentTimeRef.current = currentTime;
+  const durationRef = useRef(0);
+  durationRef.current = duration;
+  const trimStartRef = useRef(0);
+  trimStartRef.current = trimStart;
+  const trimEndRef = useRef(100);
+  trimEndRef.current = trimEnd;
+
   const handleVideoLoad = useCallback((data: any) => {
     console.log('Video onLoad', { duration: data.duration, size: data.naturalSize });
     setDuration(data.duration);
@@ -486,12 +496,12 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     try {
       setTimeout(() => {
         if (videoRef.current?.seek) {
-          const t = Math.max(0, currentTime || 0);
+          const t = Math.max(0, currentTimeRef.current || 0);
           videoRef.current.seek(t + 0.001);
         }
       }, 150);
-    } catch (e) {}
-  }, [currentTime]);
+    } catch (e) { }
+  }, []);
 
   const handleVideoReady = useCallback(() => {
     setVideoLoading(false);
@@ -506,19 +516,24 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const handleVideoProgress = useCallback((data: any) => {
     const cur = data.currentTime;
     setCurrentTime(cur);
-    const loopStart = (trimStart / 100) * duration;
-    const loopEnd = (trimEnd / 100) * duration;
-    if (duration > 0 && (cur >= loopEnd || cur < loopStart - 0.5)) {
+    const dur = durationRef.current;
+    const tStart = trimStartRef.current;
+    const tEnd = trimEndRef.current;
+    const loopStart = (tStart / 100) * dur;
+    const loopEnd = (tEnd / 100) * dur;
+    if (dur > 0 && (cur >= loopEnd || cur < loopStart - 0.5)) {
       videoRef.current?.seek(loopStart);
       setCurrentTime(loopStart);
     }
-  }, [duration, trimStart, trimEnd]);
+  }, []);
 
   const handleVideoEnd = useCallback(() => {
-    const loopStart = (trimStart / 100) * duration;
+    const dur = durationRef.current;
+    const tStart = trimStartRef.current;
+    const loopStart = (tStart / 100) * dur;
     videoRef.current?.seek(loopStart);
     setCurrentTime(loopStart);
-  }, [duration, trimStart]);
+  }, []);
 
   const handleVideoLoadStart = useCallback(() => {
     console.log('Video onLoadStart');
@@ -643,7 +658,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       if (res.errorCode) { Alert.alert('Picker Error', res.errorMessage || res.errorCode); return; }
       const uri = res.assets?.[0]?.uri;
       if (uri) {
-        await loadVideoSource(uri, { autoplay: true, clearOverlays: true });
+        await loadVideoSource(uri, { autoplay: false, clearOverlays: true });
       }
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Unable to pick video.');
@@ -661,7 +676,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       if (res.errorCode) { Alert.alert('Camera Error', res.errorMessage || res.errorCode); return; }
       const uri = res.assets?.[0]?.uri;
       if (uri) {
-        await loadVideoSource(uri, { autoplay: true, clearOverlays: true });
+        await loadVideoSource(uri, { autoplay: false, clearOverlays: true });
       }
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Unable to record video.');
@@ -706,7 +721,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       }
       const filename = `itunes_${track.trackId}.m4a`;
       const localPath = `${RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath}/${filename}`;
-      
+
       const download = RNFS.downloadFile({
         fromUrl: track.previewUrl,
         toFile: localPath,
@@ -1085,7 +1100,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       if (mergeClipsList.length > 0) {
         console.log('Sending merge request to https://ai.flarelap.com/video/merge...');
         const mergeFormData = new FormData();
-        
+
         // 1. Processed video file from step 1
         const preparedBase = await prepareFileForUpload(processedVideoUri, 'video/mp4');
         mergeFormData.append('video', preparedBase as any);
@@ -1123,7 +1138,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         try {
           const RNFS = require('react-native-fs');
           await RNFS.unlink(processedVideoUri.replace('file://', ''));
-        } catch {}
+        } catch { }
         processedVideoUri = finalVideoUri;
       }
 
@@ -1191,20 +1206,20 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
           {videoUri ? (
             <View style={[styles.videoWrapper, { width: PREVIEW_W, height: PREVIEW_H }]}>
               {/* Native video player */}
-              {playbackUri && (
+              {videoUri && (
                 <Video
                   key={`${playbackUri}_${videoKeySeed}`}
                   ref={videoRef}
-                  source={{ uri: playbackUri }}
+                  source={{ uri: videoUri }}
                   style={styles.videoFill}
                   paused={paused}
                   muted={muted}
                   volume={volume}
                   rate={playbackRate}
                   useTextureView={Platform.OS === 'android' ? useTexture : undefined}
-                  resizeMode="contain"
+                  resizeMode="cover"
                   repeat={false}
-                  controls={false}
+                  controls={true}
                   onLoad={handleVideoLoad}
                   onReadyForDisplay={handleVideoReady}
                   onProgress={handleVideoProgress}
@@ -1688,7 +1703,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
               {activeTab === 'music' && (
                 <View style={styles.panel}>
                   <Text style={styles.panelTitle}>Background Music</Text>
-                  
+
                   <TouchableOpacity
                     style={[styles.srcBtn, { marginBottom: 12 }]}
                     onPress={() => setITunesModalVisible(true)}
@@ -1729,7 +1744,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                     return (
                       <View style={styles.overlayEditor}>
                         <Text style={styles.subTitle}>Edit Music Track: {track.name}</Text>
-                        
+
                         <CustomSlider
                           label="Volume"
                           min={0}
@@ -1988,7 +2003,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         <View style={styles.modalBg}>
           <View style={[styles.modalCard, { height: '80%' }]}>
             <Title style={styles.modalTitle}>Search & Add Music</Title>
-            
+
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
               <RNTextInput
                 value={iTunesQuery}
@@ -2021,7 +2036,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                       <RNText numberOfLines={1} style={{ color: '#F8FAFC', fontSize: 13, fontWeight: '700' }}>{track.trackName}</RNText>
                       <RNText numberOfLines={1} style={{ color: '#94A3B8', fontSize: 11 }}>{track.artistName}</RNText>
                     </View>
-                    
+
                     <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                       <TouchableOpacity
                         onPress={() => {
@@ -2036,7 +2051,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                       >
                         <RNText style={{ fontSize: 12, color: '#FFF' }}>{isPlayingPreview ? '⏸' : '▶'}</RNText>
                       </TouchableOpacity>
-                      
+
                       <Button
                         mode="contained"
                         compact
