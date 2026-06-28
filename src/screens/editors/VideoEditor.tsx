@@ -381,8 +381,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [volume, setVolume] = useState(1.0);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-  // rendering-mode toggle to work around platform surface issues (Android SurfaceView vs TextureView)
-  const [useTexture, setUseTexture] = useState<boolean>(false);
+  const [useTexture, setUseTexture] = useState<boolean>(Platform.OS === 'android');
   const [videoKeySeed, setVideoKeySeed] = useState<number>(0);
 
   // Trimming (percentage 0 to 100)
@@ -540,6 +539,11 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const handleVideoLoadStart = useCallback(() => {
     console.log('Video onLoadStart');
     setVideoLoading(true);
+  }, []);
+
+  const handleVideoBuffer = useCallback((b: any) => {
+    console.log('Video onBuffer', b);
+    setVideoLoading(!!b?.isBuffering);
   }, []);
 
   const handleVideoError = useCallback((e: any) => {
@@ -1205,15 +1209,36 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
 
         {/* ── Video Preview Canvas ── */}
         <View style={styles.canvasArea}>
+          {/* <Video
+            key={`${playbackUri}_${videoKeySeed}`}
+            ref={videoRef}
+            source={videoSource}
+            style={[styles.videoFill, { width: PREVIEW_W, height: PREVIEW_H }]}
+            paused={paused}
+            muted={muted}
+            volume={volume}
+            rate={playbackRate}
+            useTextureView={Platform.OS === 'android' ? useTexture : undefined}
+            resizeMode="cover"
+            repeat={false}
+            controls={false}
+            onLoad={handleVideoLoad}
+            onReadyForDisplay={handleVideoReady}
+            onProgress={handleVideoProgress}
+            onEnd={handleVideoEnd}
+            onLoadStart={handleVideoLoadStart}
+            onBuffer={handleVideoBuffer}
+            onError={handleVideoError}
+          /> */}
           {videoUri ? (
-            <View style={[styles.videoWrapper, { width: PREVIEW_W, height: PREVIEW_H }]}>
+            <View style={[ { width: PREVIEW_W, height: PREVIEW_H }]}>
               {/* Native video player */}
               {videoUri && (
                 <Video
                   key={`${playbackUri}_${videoKeySeed}`}
                   ref={videoRef}
                   source={videoSource}
-                  style={styles.videoFill}
+                  style={{ width: '100%', height: '100%' }}
                   paused={paused}
                   muted={muted}
                   volume={volume}
@@ -1223,11 +1248,11 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   repeat={false}
                   controls={false}
                   onLoad={handleVideoLoad}
-                  onReadyForDisplay={handleVideoReady}
+                  // onReadyForDisplay={handleVideoReady}
                   onProgress={handleVideoProgress}
                   onEnd={handleVideoEnd}
                   onLoadStart={handleVideoLoadStart}
-                  onBuffer={(b: any) => { console.log('Video onBuffer', b); }}
+                  onBuffer={handleVideoBuffer}
                   onError={handleVideoError}
                 />
               )}
@@ -2119,7 +2144,7 @@ const styles = StyleSheet.create({
 
   // Canvas
   canvasArea: { alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16 },
-  videoWrapper: { backgroundColor: '#000', borderRadius: 10, overflow: 'hidden', position: 'relative' },
+  videoWrapper: { backgroundColor: 'transparent', borderRadius: 10, overflow: 'hidden', position: 'relative' },
   videoFill: { position: 'absolute', top: 0, left: 0, bottom: 0, right: 0 },
   videoOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
   errorText: { color: '#EF4444', fontSize: 14, textAlign: 'center' },
