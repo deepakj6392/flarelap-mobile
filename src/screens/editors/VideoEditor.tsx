@@ -3,6 +3,7 @@ import React, {
   useRef,
   useCallback,
   useEffect,
+  useMemo,
 } from 'react';
 import {
   View,
@@ -370,6 +371,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const loadRequestId = useRef(0);
   const initialVideoUri = route?.params?.videoUri ?? null;
   const [videoUri, setVideoUri] = useState<string | null>(initialVideoUri);
+  const videoSource = useMemo(() => (videoUri ? { uri: videoUri } : undefined), [videoUri]);
   const [playbackUri, setPlaybackUri] = useState<string | null>(initialVideoUri);
   const [paused, setPaused] = useState(true);
   const [muted, setMuted] = useState(true);
@@ -1210,7 +1212,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                 <Video
                   key={`${playbackUri}_${videoKeySeed}`}
                   ref={videoRef}
-                  source={{ uri: videoUri }}
+                  source={videoSource}
                   style={styles.videoFill}
                   paused={paused}
                   muted={muted}
@@ -1219,7 +1221,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   useTextureView={Platform.OS === 'android' ? useTexture : undefined}
                   resizeMode="cover"
                   repeat={false}
-                  controls={true}
+                  controls={false}
                   onLoad={handleVideoLoad}
                   onReadyForDisplay={handleVideoReady}
                   onProgress={handleVideoProgress}
