@@ -293,43 +293,43 @@ const mapFabricObjectsToItems = async (
           resolvedSrc = resolveRelativeUrl(baseUrl, obj.src);
         }
       }
-      
+
       let clipPathD = undefined;
       if (obj.clipPath) {
-         const clipType = (obj.clipPath.type || '').toLowerCase();
-         const cW = scaledW;
-         const cH = scaledH;
-         if (clipType === 'rect') {
-           const rx = (obj.clipPath.rx || 0) * scaleX;
-           const ry = (obj.clipPath.ry || 0) * scaleY;
-           if (rx > 0 || ry > 0) {
-             clipPathD = `M ${rx} 0 H ${cW-rx} A ${rx} ${ry} 0 0 1 ${cW} ${ry} V ${cH-ry} A ${rx} ${ry} 0 0 1 ${cW-rx} ${cH} H ${rx} A ${rx} ${ry} 0 0 1 0 ${cH-ry} V ${ry} A ${rx} ${ry} 0 0 1 ${rx} 0 Z`;
-           } else {
-             clipPathD = `M 0 0 H ${cW} V ${cH} H 0 Z`;
-           }
-         } else if (clipType === 'circle') {
-           const r = Math.min(cW, cH) / 2;
-           const cx = cW / 2;
-           const cy = cH / 2;
-           clipPathD = `M ${cx} ${cy - r} A ${r} ${r} 0 1 0 ${cx} ${cy + r} A ${r} ${r} 0 1 0 ${cx} ${cy - r}`;
-         } else if (clipType === 'polygon' || clipType === 'polyline') {
-           if (Array.isArray(obj.clipPath.points) && obj.clipPath.points.length > 0) {
-             const xs = obj.clipPath.points.map((p: any) => p.x);
-             const ys = obj.clipPath.points.map((p: any) => p.y);
-             const minX = Math.min(...xs);
-             const minY = Math.min(...ys);
-             const maxX = Math.max(...xs);
-             const maxY = Math.max(...ys);
-             const pScaleX = cW / (maxX - minX || 1);
-             const pScaleY = cH / (maxY - minY || 1);
-             const pts = obj.clipPath.points.map((p: any) => `${(p.x - minX) * pScaleX},${(p.y - minY) * pScaleY}`);
-             clipPathD = `M ${pts[0]} ` + pts.slice(1).map((p: string) => `L ${p}`).join(' ') + (clipType === 'polygon' ? ' Z' : '');
-           }
-         } else if (clipType === 'triangle') {
-           clipPathD = `M ${cW/2} 0 L ${cW} ${cH} L 0 ${cH} Z`;
-         } else if (clipType === 'path' && Array.isArray(obj.clipPath.path)) {
-           clipPathD = fabricPathToString(obj.clipPath.path);
-         }
+        const clipType = (obj.clipPath.type || '').toLowerCase();
+        const cW = scaledW;
+        const cH = scaledH;
+        if (clipType === 'rect') {
+          const rx = (obj.clipPath.rx || 0) * scaleX;
+          const ry = (obj.clipPath.ry || 0) * scaleY;
+          if (rx > 0 || ry > 0) {
+            clipPathD = `M ${rx} 0 H ${cW - rx} A ${rx} ${ry} 0 0 1 ${cW} ${ry} V ${cH - ry} A ${rx} ${ry} 0 0 1 ${cW - rx} ${cH} H ${rx} A ${rx} ${ry} 0 0 1 0 ${cH - ry} V ${ry} A ${rx} ${ry} 0 0 1 ${rx} 0 Z`;
+          } else {
+            clipPathD = `M 0 0 H ${cW} V ${cH} H 0 Z`;
+          }
+        } else if (clipType === 'circle') {
+          const r = Math.min(cW, cH) / 2;
+          const cx = cW / 2;
+          const cy = cH / 2;
+          clipPathD = `M ${cx} ${cy - r} A ${r} ${r} 0 1 0 ${cx} ${cy + r} A ${r} ${r} 0 1 0 ${cx} ${cy - r}`;
+        } else if (clipType === 'polygon' || clipType === 'polyline') {
+          if (Array.isArray(obj.clipPath.points) && obj.clipPath.points.length > 0) {
+            const xs = obj.clipPath.points.map((p: any) => p.x);
+            const ys = obj.clipPath.points.map((p: any) => p.y);
+            const minX = Math.min(...xs);
+            const minY = Math.min(...ys);
+            const maxX = Math.max(...xs);
+            const maxY = Math.max(...ys);
+            const pScaleX = cW / (maxX - minX || 1);
+            const pScaleY = cH / (maxY - minY || 1);
+            const pts = obj.clipPath.points.map((p: any) => `${(p.x - minX) * pScaleX},${(p.y - minY) * pScaleY}`);
+            clipPathD = `M ${pts[0]} ` + pts.slice(1).map((p: string) => `L ${p}`).join(' ') + (clipType === 'polygon' ? ' Z' : '');
+          }
+        } else if (clipType === 'triangle') {
+          clipPathD = `M ${cW / 2} 0 L ${cW} ${cH} L 0 ${cH} Z`;
+        } else if (clipType === 'path' && Array.isArray(obj.clipPath.path)) {
+          clipPathD = fabricPathToString(obj.clipPath.path);
+        }
       }
 
       items.push({
@@ -344,8 +344,8 @@ const mapFabricObjectsToItems = async (
         opacity,
         borderRadius: 0,
         clipPathD,
-        clipPathTransform: (obj.clipPath?.type || '').toLowerCase() === 'path' 
-          ? `translate(${scaledW/2}, ${scaledH/2}) scale(${scaledW / (obj.clipPath.width || scaledW)}, ${scaledH / (obj.clipPath.height || scaledH)})`
+        clipPathTransform: (obj.clipPath?.type || '').toLowerCase() === 'path'
+          ? `translate(${scaledW / 2}, ${scaledH / 2}) scale(${scaledW / (obj.clipPath.width || scaledW)}, ${scaledH / (obj.clipPath.height || scaledH)})`
           : undefined,
       });
       continue;
@@ -1244,7 +1244,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
           const isCenterOrigin = (obj.originX ?? 'left') === 'center';
           const left = isCenterOrigin ? (obj.left ?? 0) - w / 2 : (obj.left ?? 0);
           const top = isCenterOrigin ? (obj.top ?? 0) - h / 2 : (obj.top ?? 0);
-          
+
           if (left < minX) minX = left;
           if (top < minY) minY = top;
           if (left + w > maxX) maxX = left + w;
@@ -1253,7 +1253,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
 
         const contentWidth = Number.isFinite(maxX) && Number.isFinite(minX) ? maxX - minX : 400;
         const contentHeight = Number.isFinite(maxY) && Number.isFinite(minY) ? maxY - minY : 400;
-        const templateWidth =  contentWidth;
+        const templateWidth = contentWidth;
         const templateHeight = contentHeight;
 
         const targetWidth = windowWidth;
@@ -1277,7 +1277,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
             obj.scaleY = (obj.scaleY || 1) * scaleY;
           });
         }
-        
+
         const svgMetrics: CanvasMetrics = { width: targetWidth, height: targetHeight, minX: 0, minY: 0 };
 
         // Use the clean SVG URL (returned by API) as the background layer and cache base64 images
@@ -1660,6 +1660,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                           mode="outlined"
                           label="Text Content"
                           dense
+                          multiline={true}
                           value={selectedItem.text || ''}
                           onChangeText={(t) => handleUpdateItem(selectedItem.id, { text: t })}
                           onBlur={commitHistory}

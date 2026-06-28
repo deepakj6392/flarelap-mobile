@@ -105,6 +105,31 @@ interface Overlay {
   uri?: string;
   borderRadius?: number;
   opacity?: number;
+  // timing
+  startTime: number;
+  endTime: number;
+}
+
+interface MusicTrack {
+  id: string;
+  name: string;
+  uri: string;
+  startTime: number;
+  endTime: number;
+  volume: number;
+  fileObj?: {
+    uri: string;
+    name: string;
+    type: string;
+  };
+}
+
+interface MergeClip {
+  id: string;
+  name: string;
+  uri: string;
+  position: 'start' | 'end';
+  order: number;
 }
 
 // ─── SVG Icons ─────────────────────────────────────────────────────────────────
@@ -359,6 +384,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [useTexture, setUseTexture] = useState<boolean>(Platform.OS === 'android');
   const [videoKeySeed, setVideoKeySeed] = useState<number>(0);
 
+  // Trimming (percentage 0 to 100)
+  const [trimStart, setTrimStart] = useState<number>(0);
+  const [trimEnd, setTrimEnd] = useState<number>(100);
+
   // Overlays
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
@@ -370,9 +399,14 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   // Templates modal
   const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
 
-  // Music
-  const [selectedMusic, setSelectedMusic] = useState<string>('none');
+  // Music & Multi-track
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
+  const [selectedMusicTrack, setSelectedMusicTrack] = useState<string | null>(null);
   const [musicVolume, setMusicVolume] = useState(0.7);
+  const [iTunesModalVisible, setITunesModalVisible] = useState(false);
+
+  // Video Merging
+  const [videoMergeClips, setVideoMergeClips] = useState<{ start: MergeClip[]; end: MergeClip[]; }>({ start: [], end: [] });
 
   // Filter
   const [filterPreset, setFilterPreset] = useState<string>('none');
@@ -391,12 +425,49 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [exporting, setExporting] = useState(false);
 
   // Undo/Redo
-  type HistoryEntry = { overlays: Overlay[]; filter: string; music: string; musicVol: number; };
+  type HistoryEntry = {
+    overlays: Overlay[];
+    filter: string;
+    musicTracks: MusicTrack[];
+    trimStart: number;
+    trimEnd: number;
+    videoMergeClips: { start: MergeClip[]; end: MergeClip[]; };
+  };
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
+
+  // Timeline Scroll Refs
+  const timelineScrollRef = useRef<ScrollView>(null);
+  const isDraggingTimeline = useRef(false);
 
   // ── helpers ──
   const isRemoteVideoUri = (uri: string) => /^https?:\/\//i.test(uri);
+
+  const THUMBNAIL_MAPPING: Record<string, any> = {
+    'assets/images/video/v_1.png': require('../../assets/images/video/v_1.png'),
+    'assets/images/video/v_2.png': require('../../assets/images/video/v_2.png'),
+    'assets/images/video/v_3.png': require('../../assets/images/video/v_3.png'),
+    'assets/images/video/v_4.png': require('../../assets/images/video/v_4.png'),
+    'assets/images/video/v_5.png': require('../../assets/images/video/v_5.png'),
+    'assets/images/video/v_6.png': require('../../assets/images/video/v_6.png'),
+    'assets/images/video/v_7.png': require('../../assets/images/video/v_7.png'),
+    'assets/images/video/v_8.png': require('../../assets/images/video/v_8.png'),
+  };
+
+  const getThumbnailSource = (path?: string) => {
+    if (!path) return null;
+    if (path.startsWith('http') || path.startsWith('file://')) {
+      return { uri: path };
+    }
+    if (THUMBNAIL_MAPPING[path]) {
+      return THUMBNAIL_MAPPING[path];
+    }
+    if (Platform.OS === 'android') {
+      return { uri: `asset:/${path}` };
+    }
+    return { uri: path };
+  };
 
   const getVideoExtension = (uri: string) => {
     const cleanUri = uri.split('?')[0].toLowerCase();
@@ -435,9 +506,15 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     setPaused(!(options?.autoplay ?? true));
     setVideoError(null);
     setVideoLoading(true);
+    setTrimStart(0);
+    setTrimEnd(100);
+    setSelectedOverlay(null);
+    setSelectedMusicTrack(null);
 
     if (options?.clearOverlays) {
       setOverlays([]);
+      setMusicTracks([]);
+      setVideoMergeClips({ start: [], end: [] });
       setHistory([]);
       setHistoryIdx(-1);
     }
@@ -467,21 +544,26 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     const entry: HistoryEntry = {
       overlays: patch?.overlays ?? overlays,
       filter: patch?.filter ?? filterPreset,
-      music: patch?.music ?? selectedMusic,
-      musicVol: patch?.musicVol ?? musicVolume,
+      musicTracks: patch?.musicTracks ?? musicTracks,
+      trimStart: patch?.trimStart ?? trimStart,
+      trimEnd: patch?.trimEnd ?? trimEnd,
+      videoMergeClips: patch?.videoMergeClips ?? videoMergeClips,
     };
     setHistory(h => { const next = [...h.slice(0, historyIdx + 1), entry]; setHistoryIdx(next.length - 1); return next; });
-  }, [overlays, filterPreset, selectedMusic, musicVolume, historyIdx]);
+  }, [overlays, filterPreset, musicTracks, trimStart, trimEnd, videoMergeClips, historyIdx]);
 
   const applyHistory = (idx: number) => {
     if (idx < 0 || idx >= history.length) return;
     const e = history[idx];
     setOverlays(e.overlays);
     setFilterPreset(e.filter);
-    setSelectedMusic(e.music);
-    setMusicVolume(e.musicVol);
+    setMusicTracks(e.musicTracks);
+    setTrimStart(e.trimStart);
+    setTrimEnd(e.trimEnd);
+    setVideoMergeClips(e.videoMergeClips);
     setHistoryIdx(idx);
     setSelectedOverlay(null);
+    setSelectedMusicTrack(null);
   };
 
   useEffect(() => {
@@ -489,6 +571,49 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       loadVideoSource(route.params.videoUri, { autoplay: false, clearOverlays: true });
     }
   }, [loadVideoSource, route?.params?.videoUri]);
+
+  // Timeline Scroll Scale and Programmatic Syncer
+  const TIMELINE_SCALE = 30; // 30 pixels per second
+  const playheadCenter = (screenWidth - 32) / 2;
+
+  useEffect(() => {
+    if (!isDraggingTimeline.current && timelineScrollRef.current && duration > 0) {
+      const x = currentTime * TIMELINE_SCALE;
+      timelineScrollRef.current.scrollTo({ x, animated: false });
+    }
+  }, [currentTime, duration]);
+
+  const handleTimelineScroll = (event: any) => {
+    if (isDraggingTimeline.current && duration > 0) {
+      const x = event.nativeEvent.contentOffset.x;
+      const newTime = Math.max(0, Math.min(duration, x / TIMELINE_SCALE));
+      setCurrentTime(newTime);
+      videoRef.current?.seek(newTime);
+    }
+  };
+
+  // Background audio sync refs & hook
+  const audioRefs = useRef<Record<string, any>>({});
+  const lastPaused = useRef(true);
+
+  useEffect(() => {
+    const isPlayTransition = lastPaused.current && !paused;
+    lastPaused.current = paused;
+
+    if (isPlayTransition || isDraggingTimeline.current) {
+      musicTracks.forEach(track => {
+        const audioRef = audioRefs.current[track.id];
+        if (audioRef) {
+          const relativeTime = currentTime - track.startTime;
+          if (relativeTime >= 0 && relativeTime <= (track.endTime - track.startTime)) {
+            audioRef.seek(relativeTime);
+          } else {
+            audioRef.seek(0);
+          }
+        }
+      });
+    }
+  }, [currentTime, paused, musicTracks]);
 
   // ── video picker ──
   const pickVideo = async () => {
@@ -528,6 +653,125 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     await loadVideoSource(t.videoURL, { autoplay: true, clearOverlays: true, closeTemplates: true });
   };
 
+  // iTunes search states & helpers
+  const [iTunesQuery, setITunesQuery] = useState('');
+  const [iTunesResults, setITunesResults] = useState<any[]>([]);
+  const [searchingITunes, setSearchingITunes] = useState(false);
+  const [downloadingTrackId, setDownloadingTrackId] = useState<number | null>(null);
+  const [previewTrackUrl, setPreviewTrackUrl] = useState<string | null>(null);
+  const [previewPaused, setPreviewPaused] = useState(true);
+
+  const searchITunes = async () => {
+    if (!iTunesQuery.trim()) return;
+    setSearchingITunes(true);
+    try {
+      const response = await fetch(
+        `https://itunes.apple.com/search?term=${encodeURIComponent(iTunesQuery)}&media=music&entity=song&limit=15`
+      );
+      const data = await response.json();
+      setITunesResults(data.results || []);
+    } catch (e) {
+      Alert.alert('Search Error', 'Unable to fetch tracks from iTunes.');
+    } finally {
+      setSearchingITunes(false);
+    }
+  };
+
+  const downloadAndUseITunesTrack = async (track: any) => {
+    setDownloadingTrackId(track.trackId);
+    try {
+      const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+      if (!RNFS) {
+        throw new Error('FileSystem storage not available.');
+      }
+      const filename = `itunes_${track.trackId}.m4a`;
+      const localPath = `${RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath}/${filename}`;
+      
+      const download = RNFS.downloadFile({
+        fromUrl: track.previewUrl,
+        toFile: localPath,
+      });
+      const result = await download.promise;
+      if (result.statusCode < 200 || result.statusCode >= 300) {
+        throw new Error('Download failed');
+      }
+
+      const newTrack: MusicTrack = {
+        id: `music_${Date.now()}`,
+        name: track.trackName,
+        uri: `file://${localPath}`,
+        startTime: 0,
+        endTime: duration || 10,
+        volume: 0.8,
+        fileObj: {
+          uri: `file://${localPath}`,
+          name: filename,
+          type: 'audio/x-m4a',
+        }
+      };
+
+      const updated = [...musicTracks, newTrack];
+      setMusicTracks(updated);
+      setSelectedMusicTrack(newTrack.id);
+      setITunesModalVisible(false);
+      commitHistory({ musicTracks: updated });
+    } catch (err: any) {
+      Alert.alert('Download Failed', err.message || 'Unable to download track preview.');
+    } finally {
+      setDownloadingTrackId(null);
+    }
+  };
+
+  const deleteMusicTrack = (id: string) => {
+    const updated = musicTracks.filter(t => t.id !== id);
+    setMusicTracks(updated);
+    setSelectedMusicTrack(null);
+    commitHistory({ musicTracks: updated });
+  };
+
+  const updateMusicTrack = (id: string, patch: Partial<MusicTrack>) => {
+    const updated = musicTracks.map(t => t.id === id ? { ...t, ...patch } : t);
+    setMusicTracks(updated);
+    commitHistory({ musicTracks: updated });
+  };
+
+  const addMergeClip = async (position: 'start' | 'end') => {
+    try {
+      const res = await launchImageLibrary({ mediaType: 'video', videoQuality: 'high' });
+      if (res.didCancel) return;
+      if (res.errorCode) { Alert.alert('Picker Error', res.errorMessage || res.errorCode); return; }
+      const uri = res.assets?.[0]?.uri;
+      const name = res.assets?.[0]?.fileName || `clip_${Date.now()}.mp4`;
+      if (uri) {
+        const newClip: MergeClip = {
+          id: `merge_${Date.now()}`,
+          name,
+          uri,
+          position,
+          order: videoMergeClips[position].length,
+        };
+        const updated = {
+          ...videoMergeClips,
+          [position]: [...videoMergeClips[position], newClip],
+        };
+        setVideoMergeClips(updated);
+        commitHistory({ videoMergeClips: updated });
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Unable to pick merge clip.');
+    }
+  };
+
+  const deleteMergeClip = (position: 'start' | 'end', id: string) => {
+    const updatedList = videoMergeClips[position].filter(c => c.id !== id).map((c, idx) => ({ ...c, order: idx }));
+    const updated = {
+      ...videoMergeClips,
+      [position]: updatedList,
+    };
+    setVideoMergeClips(updated);
+    commitHistory({ videoMergeClips: updated });
+  };
+
   // ── image overlay picker ──
   const pickImageOverlay = async () => {
     try {
@@ -542,6 +786,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
           x: PREVIEW_W / 2 - 60, y: PREVIEW_H / 2 - 60,
           width: 120, height: 120, rotation: 0,
           uri, borderRadius: 0, opacity: 1,
+          startTime: 0,
+          endTime: duration || 10,
         };
         const updated = [...overlays, item];
         setOverlays(updated);
@@ -562,6 +808,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       text: textInput, fontSize, color: textColor, bold: textBold,
       x: PREVIEW_W / 2 - 70, y: PREVIEW_H / 2 - 25,
       width: 140, height: 50, rotation: 0,
+      startTime: 0,
+      endTime: duration || 10,
     };
     const updated = [...overlays, item];
     setOverlays(updated);
@@ -607,43 +855,272 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const scrubPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   // ── export to backend ──
+  const getFilterAdjustments = (preset: string) => {
+    switch (preset) {
+      case 'vintage': return { brightness: -0.05, contrast: 0.9, saturation: 0.7 };
+      case 'cinematic': return { brightness: -0.08, contrast: 1.2, saturation: 0.9 };
+      case 'warm': return { brightness: 0.03, contrast: 1.0, saturation: 1.2 };
+      case 'cool': return { brightness: 0.02, contrast: 1.0, saturation: 0.8 };
+      case 'noir': return { brightness: -0.05, contrast: 1.3, saturation: 0.0 };
+      case 'vivid': return { brightness: 0.05, contrast: 1.1, saturation: 1.4 };
+      case 'fade': return { brightness: 0.08, contrast: 0.8, saturation: 0.8 };
+      default: return { brightness: 0.0, contrast: 1.0, saturation: 1.0 };
+    }
+  };
+
+  const getUploadType = (uri: string, fallback = 'video/mp4') => {
+    const clean = uri.split('?')[0].toLowerCase();
+    if (clean.endsWith('.mp4')) return 'video/mp4';
+    if (clean.endsWith('.mov')) return 'video/quicktime';
+    if (clean.endsWith('.m4v')) return 'video/x-m4v';
+    if (clean.endsWith('.mp3')) return 'audio/mpeg';
+    if (clean.endsWith('.m4a')) return 'audio/x-m4a';
+    if (clean.endsWith('.wav')) return 'audio/x-wav';
+    if (clean.endsWith('.png')) return 'image/png';
+    if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return 'image/jpeg';
+    return fallback;
+  };
+
+  const getUploadName = (uri: string, type: string) => {
+    const parts = uri.split('/');
+    let last = parts[parts.length - 1] || 'file';
+    if (last.includes('?')) {
+      last = last.split('?')[0];
+    }
+    if (!last.includes('.')) {
+      const ext = type.split('/')[1] || 'bin';
+      last = `${last}.${ext}`;
+    }
+    return last;
+  };
+
+  const prepareFileForUpload = async (uri: string, fallbackType = 'video/mp4') => {
+    if (!uri.startsWith('http')) {
+      const type = getUploadType(uri, fallbackType);
+      return { uri, type, name: getUploadName(uri, type) };
+    }
+
+    const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+    if (!RNFS) {
+      throw new Error('FileSystem storage not available.');
+    }
+
+    const type = getUploadType(uri, fallbackType);
+    const name = getUploadName(uri, type);
+    const tmpDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath;
+    const localPath = `${tmpDir}/${Date.now()}_${name}`;
+    const download = RNFS.downloadFile({ fromUrl: uri, toFile: localPath });
+    const result = await download.promise;
+    if (result.statusCode < 200 || result.statusCode >= 300) {
+      throw new Error(`Failed to download: ${uri}`);
+    }
+    return { uri: `file://${localPath}`, type, name };
+  };
+
+  const readBlobAsDataUrl = (blob: any) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const saveBlobResponseAsVideo = async (response: any) => {
+    const blob = await response.blob();
+    const dataUrl = await readBlobAsDataUrl(blob);
+    const base64 = dataUrl.split(',')[1];
+    if (!base64) {
+      throw new Error('Video processing returned an invalid file.');
+    }
+
+    const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
+    if (!RNFS) {
+      throw new Error('FileSystem storage not available.');
+    }
+
+    const tmpDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath;
+    const filePath = `${tmpDir}/processed_video_${Date.now()}.mp4`;
+    await RNFS.writeFile(filePath, base64, 'base64');
+    return `file://${filePath}`;
+  };
+
   const handleExport = async () => {
     if (!videoUri) { Alert.alert('No Video', 'Please select or record a video first.'); return; }
     setExporting(true);
     try {
-      const payload = {
-        videoUri,
-        filter: filterPreset,
-        music: selectedMusic !== 'none' ? selectedMusic : null,
-        musicVolume,
-        playbackRate,
-        overlays: overlays.map(o => ({
-          type: o.type,
-          x: o.x / PREVIEW_W,       // normalised 0-1
-          y: o.y / PREVIEW_H,
-          width: o.width / PREVIEW_W,
-          height: o.height / PREVIEW_H,
-          rotation: o.rotation,
-          ...(o.type === 'text' ? { text: o.text, fontSize: o.fontSize, color: o.color, bold: o.bold } : {}),
-          ...(o.type === 'image' ? { uri: o.uri, borderRadius: o.borderRadius, opacity: o.opacity } : {}),
-        })),
-      };
+      // 1. Prepare main video file
+      const preparedMainVideo = await prepareFileForUpload(videoUri, 'video/mp4');
 
-      // POST to backend FFmpeg export API
-      const response = await api.post('/video/export', payload, {
-        timeout: 120_000, // 2-min timeout for video processing
+      // 2. Build form data for process
+      const formData = new FormData();
+      formData.append('video', preparedMainVideo as any);
+
+      // Calculations for trimming
+      const startSec = (trimStart / 100) * duration;
+      const durSec = ((trimEnd - trimStart) / 100) * duration;
+      formData.append('trimStart', String(startSec));
+      if (duration > 0) {
+        formData.append('trimDuration', String(durSec));
+      }
+
+      // Filter settings (mapped to adjustments)
+      const adjustments = getFilterAdjustments(filterPreset);
+      formData.append('brightness', String(adjustments.brightness));
+      formData.append('contrast', String(adjustments.contrast));
+      formData.append('saturation', String(adjustments.saturation));
+
+      // Overlays formatting
+      const scaleX = naturalSize ? naturalSize.width / PREVIEW_W : 1.0;
+      const scaleY = naturalSize ? naturalSize.height / PREVIEW_H : 1.0;
+
+      // Text overlays
+      const textOverlaysPayload = overlays
+        .filter(o => o.type === 'text')
+        .map(o => ({
+          id: o.id,
+          text: o.text || '',
+          x: (o.x / PREVIEW_W) * 100, // percentage
+          y: (o.y / PREVIEW_H) * 100, // percentage
+          fontSize: o.fontSize || 24,
+          color: o.color || '#FFFFFF',
+          bold: !!o.bold,
+          startTime: o.startTime,
+          endTime: o.endTime
+        }));
+      formData.append('textOverlays', JSON.stringify(textOverlaysPayload));
+
+      // Logo overlays
+      const imageOverlays = overlays.filter(o => o.type === 'image');
+      const logoOverlaysPayload = imageOverlays.map((o, idx) => ({
+        id: o.id,
+        filename: `logo_${idx}.png`,
+        x: (o.x / PREVIEW_W) * 100, // percentage
+        y: (o.y / PREVIEW_H) * 100, // percentage
+        width: Math.round(o.width * scaleX),
+        height: Math.round(o.height * scaleY),
+        startTime: o.startTime,
+        endTime: o.endTime
+      }));
+      formData.append('logoOverlays', JSON.stringify(logoOverlaysPayload));
+
+      // Attach logo image files
+      for (let i = 0; i < imageOverlays.length; i++) {
+        const overlay = imageOverlays[i];
+        if (overlay.uri) {
+          const preparedLogo = await prepareFileForUpload(overlay.uri, 'image/png');
+          formData.append(`logo_${i}`, preparedLogo as any);
+        }
+      }
+
+      // Music tracks
+      if (musicTracks.length > 0) {
+        // Attach music track files
+        for (let i = 0; i < musicTracks.length; i++) {
+          const track = musicTracks[i];
+          const preparedMusic = await prepareFileForUpload(track.uri, 'audio/x-m4a');
+          formData.append(`music_${i}`, preparedMusic as any);
+        }
+
+        // Music tracks JSON
+        const musicTracksPayload = musicTracks.map((t, idx) => ({
+          id: t.id,
+          fileKey: `music_${idx}`,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          volume: t.volume
+        }));
+        formData.append('musicTracks', JSON.stringify(musicTracksPayload));
+      } else {
+        formData.append('musicTracks', '[]');
+      }
+
+      // Original video volume
+      formData.append('sourceAudioVolume', String(volume));
+
+      // Make process request to fastapi backend
+      console.log('Sending process request to https://ai.flarelap.com/video/process...');
+      const response = await fetch('https://ai.flarelap.com/video/process', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Accept: 'video/mp4, application/json'
+        }
       });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || `Server error HTTP ${response.status}`);
+      }
+
+      let processedVideoUri = await saveBlobResponseAsVideo(response);
+      console.log('Video processed successfully:', processedVideoUri);
+
+      // If we have merge clips, perform sequential call to /video/merge
+      const mergeClipsList = [
+        ...videoMergeClips.start.map((c, idx) => ({ ...c, order: idx })),
+        ...videoMergeClips.end.map((c, idx) => ({ ...c, order: idx }))
+      ];
+
+      if (mergeClipsList.length > 0) {
+        console.log('Sending merge request to https://ai.flarelap.com/video/merge...');
+        const mergeFormData = new FormData();
+        
+        // 1. Processed video file from step 1
+        const preparedBase = await prepareFileForUpload(processedVideoUri, 'video/mp4');
+        mergeFormData.append('video', preparedBase as any);
+
+        // 2. Merge clips JSON
+        const mergeClipsConfig = mergeClipsList.map((clip, index) => ({
+          fileKey: `clip_${index}`,
+          position: clip.position,
+          order: clip.order
+        }));
+        mergeFormData.append('mergeClips', JSON.stringify(mergeClipsConfig));
+
+        // 3. Attach merge clip files
+        for (let i = 0; i < mergeClipsList.length; i++) {
+          const clip = mergeClipsList[i];
+          const preparedClip = await prepareFileForUpload(clip.uri, 'video/mp4');
+          mergeFormData.append(`clip_${i}`, preparedClip as any);
+        }
+
+        const mergeResponse = await fetch('https://ai.flarelap.com/video/merge', {
+          method: 'POST',
+          body: mergeFormData,
+          headers: {
+            Accept: 'video/mp4, application/json'
+          }
+        });
+
+        if (!mergeResponse.ok) {
+          const errText = await mergeResponse.text();
+          throw new Error(`Merge failed: ${errText || mergeResponse.status}`);
+        }
+
+        const finalVideoUri = await saveBlobResponseAsVideo(mergeResponse);
+        // Clean up step 1 processed file
+        try {
+          const RNFS = require('react-native-fs');
+          await RNFS.unlink(processedVideoUri.replace('file://', ''));
+        } catch {}
+        processedVideoUri = finalVideoUri;
+      }
+
+      // Copy the final file to a permanent path in the Documents folder
+      const RNFS = require('react-native-fs');
+      const finalFileName = `flarelap_export_${Date.now()}.mp4`;
+      const finalDestPath = `${RNFS.DocumentDirectoryPath || RNFS.CachesDirectoryPath}/${finalFileName}`;
+      await RNFS.copyFile(processedVideoUri.replace('file://', ''), finalDestPath);
 
       Alert.alert(
         'Export Successful! 🎉',
-        `Your video is ready.\n${response.data?.downloadUrl ? `Download: ${response.data.downloadUrl}` : 'Check your exports.'}`,
+        `Your video is saved at:\nDocuments/${finalFileName}`,
         [{ text: 'OK' }],
       );
     } catch (err: any) {
-      Alert.alert(
-        'Export Failed',
-        err?.response?.data?.message || err?.message || 'Something went wrong. Please try again.',
-      );
+      console.error('Export Error:', err);
+      Alert.alert('Export Failed', err.message || 'Something went wrong. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -709,8 +1186,11 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   repeat={false}
                   controls={true}
                   onLoad={(data: any) => {
-                    console.log('Video onLoad', { duration: data.duration });
+                    console.log('Video onLoad', { duration: data.duration, size: data.naturalSize });
                     setDuration(data.duration);
+                    if (data.naturalSize) {
+                      setNaturalSize({ width: data.naturalSize.width, height: data.naturalSize.height });
+                    }
                     setVideoLoading(false);
                     // nudge a tiny seek to force first-frame decode on some devices
                     try {
@@ -733,8 +1213,21 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                       }, 100);
                     }
                   }}
-                  onProgress={(data: any) => setCurrentTime(data.currentTime)}
-                  onEnd={() => { setPaused(true); setCurrentTime(0); }}
+                  onProgress={(data: any) => {
+                    const cur = data.currentTime;
+                    setCurrentTime(cur);
+                    const loopStart = (trimStart / 100) * duration;
+                    const loopEnd = (trimEnd / 100) * duration;
+                    if (duration > 0 && (cur >= loopEnd || cur < loopStart - 0.5)) {
+                      videoRef.current?.seek(loopStart);
+                      setCurrentTime(loopStart);
+                    }
+                  }}
+                  onEnd={() => {
+                    const loopStart = (trimStart / 100) * duration;
+                    videoRef.current?.seek(loopStart);
+                    setCurrentTime(loopStart);
+                  }}
                   onLoadStart={() => { console.log('Video onLoadStart'); setVideoLoading(true); }}
                   onBuffer={(b: any) => { console.log('Video onBuffer', b); setVideoLoading(!!b?.isBuffering); }}
                   onError={(e: any) => {
@@ -744,6 +1237,23 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   }}
                 />
               )}
+
+              {/* Synced music preview tracks */}
+              {musicTracks.map(track => {
+                const isPlaying = !paused && currentTime >= track.startTime && currentTime <= track.endTime;
+                return (
+                  <Video
+                    key={track.id}
+                    ref={r => { if (r) audioRefs.current[track.id] = r; }}
+                    source={{ uri: track.uri }}
+                    audioOnly={true}
+                    paused={!isPlaying}
+                    volume={muted ? 0 : track.volume * musicVolume}
+                    rate={playbackRate}
+                    repeat={false}
+                  />
+                );
+              })}
 
               {/* Overlay dim for filter badge */}
               {filterPreset !== 'none' && (
@@ -762,17 +1272,19 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
               )}
               {/* Overlays */}
               <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-                {overlays.map(o => (
-                  <MovableOverlay
-                    key={o.id}
-                    item={o}
-                    selected={selectedOverlay === o.id}
-                    onSelect={setSelectedOverlay}
-                    onUpdate={updateOverlay}
-                    onDelete={deleteOverlay}
-                    onCommit={() => commitHistory()}
-                  />
-                ))}
+                {overlays
+                  .filter(o => currentTime >= o.startTime && currentTime <= o.endTime)
+                  .map(o => (
+                    <MovableOverlay
+                      key={o.id}
+                      item={o}
+                      selected={selectedOverlay === o.id}
+                      onSelect={setSelectedOverlay}
+                      onUpdate={updateOverlay}
+                      onDelete={deleteOverlay}
+                      onCommit={() => commitHistory()}
+                    />
+                  ))}
               </View>
 
               {/* Loading/Error */}
@@ -795,24 +1307,35 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
             </View>
           ) : (
             /* Empty state */
-            <View style={[styles.emptyCanvas, { width: PREVIEW_W, height: PREVIEW_H }]}>
+            <View style={[styles.emptyCanvas, { width: PREVIEW_W, minHeight: PREVIEW_H, paddingVertical: 16 }]}>
               <Icon.Video size={48} color="#334155" />
               <Title style={styles.emptyTitle}>No Video Selected</Title>
               <Text style={styles.emptySub}>Pick from gallery, record with camera, or use a template to start editing</Text>
 
-              {/* Inline templates strip so users can pick templates without opening modal */}
+              {/* Inline templates grid so users can pick templates without opening modal */}
               <View style={styles.templatesRow}>
                 <Text style={styles.templateHeading}>Templates</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 6 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 6 }}>
                   {VIDEOS_TEMPLATES.map(t => (
-                    <TouchableOpacity key={t.id} style={styles.templateCard} onPress={() => selectTemplate(t)}>
-                      <View style={styles.templateThumb}>
-                        <Icon.Play size={20} color="#fff" />
+                    <TouchableOpacity key={t.id} style={{ width: '48%', marginBottom: 10 }} onPress={() => selectTemplate(t)}>
+                      <View style={[styles.templateCard, { width: '100%', marginRight: 0 }]}>
+                        <View style={[styles.templateThumb, { width: '100%', height: 100, position: 'relative', overflow: 'hidden' }]}>
+                          {t.thumbnail ? (
+                            <RNImage
+                              source={getThumbnailSource(t.thumbnail)}
+                              style={StyleSheet.absoluteFillObject}
+                              resizeMode="cover"
+                            />
+                          ) : null}
+                          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.15)' }}>
+                            <Icon.Play size={16} color="#fff" />
+                          </View>
+                        </View>
+                        <Text style={styles.templateTitle} numberOfLines={1}>{t.title}</Text>
                       </View>
-                      <Text style={styles.templateTitle} numberOfLines={1}>{t.title}</Text>
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
+                </View>
               </View>
 
               <View style={styles.emptyActions}>
@@ -832,15 +1355,153 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         {/* ── Playback Controls ── */}
         {videoUri && (
           <View style={styles.playbackBar}>
-            {/* Scrubber */}
-            <View style={styles.scrubRow}>
-              <Text style={styles.timeLabel}>{formatTime(currentTime)}</Text>
-              <View style={[styles.scrubTrack, { width: scrubberWidth }]} {...scrubPR.panHandlers}>
-                <View style={styles.scrubBg} />
-                <View style={[styles.scrubFill, { width: `${scrubPct}%` }]} />
-                <View style={[styles.scrubThumb, { left: `${scrubPct}%`, transform: [{ translateX: -7 }] }]} />
+            {/* Timeline Scrubber */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 4 }}>
+              <RNText style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(currentTime)}</RNText>
+              <RNText style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(duration)}</RNText>
+            </View>
+            <View style={tl.container}>
+              <View style={tl.playhead}>
+                <View style={tl.playheadCap} />
               </View>
-              <Text style={styles.timeLabel}>{formatTime(duration)}</Text>
+
+              <ScrollView
+                ref={timelineScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={handleTimelineScroll}
+                onScrollBeginDrag={() => { isDraggingTimeline.current = true; }}
+                onScrollEndDrag={() => { isDraggingTimeline.current = false; }}
+                onMomentumScrollEnd={() => { isDraggingTimeline.current = false; }}
+                contentContainerStyle={{ paddingLeft: playheadCenter, paddingRight: playheadCenter }}
+              >
+                <View style={{ width: Math.max(screenWidth - 32, duration * TIMELINE_SCALE), height: 135, position: 'relative' }}>
+                  {/* Ruler track */}
+                  <View style={tl.ruler}>
+                    {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => {
+                      if (i % 5 !== 0) return null;
+                      return (
+                        <View key={i} style={[tl.tick, { left: i * TIMELINE_SCALE }]}>
+                          <View style={tl.tickLine} />
+                          <RNText style={tl.tickText}>{formatTime(i)}</RNText>
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {/* Video Lane */}
+                  <View style={[tl.lane, tl.videoLane]}>
+                    <RNText style={tl.laneLabel}>Video</RNText>
+                    <View
+                      style={[
+                        tl.videoTrimmedBg,
+                        {
+                          left: (trimStart / 100) * duration * TIMELINE_SCALE,
+                          width: ((trimEnd - trimStart) / 100) * duration * TIMELINE_SCALE,
+                        },
+                      ]}
+                    />
+                  </View>
+
+                  {/* Text Overlays Lane */}
+                  <View style={tl.lane}>
+                    <RNText style={tl.laneLabel}>Texts</RNText>
+                    {overlays
+                      .filter(o => o.type === 'text')
+                      .map(o => {
+                        const isSelected = selectedOverlay === o.id;
+                        return (
+                          <TouchableOpacity
+                            key={o.id}
+                            style={[
+                              tl.block,
+                              tl.textBlock,
+                              {
+                                left: o.startTime * TIMELINE_SCALE,
+                                width: Math.max(30, (o.endTime - o.startTime) * TIMELINE_SCALE),
+                              },
+                              isSelected && tl.selectedBlock,
+                            ]}
+                            onPress={() => {
+                              setSelectedOverlay(o.id);
+                              videoRef.current?.seek(o.startTime);
+                              setCurrentTime(o.startTime);
+                            }}
+                          >
+                            <RNText numberOfLines={1} style={tl.blockText}>
+                              {o.text || 'Text'}
+                            </RNText>
+                          </TouchableOpacity>
+                        );
+                      })}
+                  </View>
+
+                  {/* Image Overlays Lane */}
+                  <View style={tl.lane}>
+                    <RNText style={tl.laneLabel}>Images</RNText>
+                    {overlays
+                      .filter(o => o.type === 'image')
+                      .map(o => {
+                        const isSelected = selectedOverlay === o.id;
+                        return (
+                          <TouchableOpacity
+                            key={o.id}
+                            style={[
+                              tl.block,
+                              tl.imageBlock,
+                              {
+                                left: o.startTime * TIMELINE_SCALE,
+                                width: Math.max(30, (o.endTime - o.startTime) * TIMELINE_SCALE),
+                              },
+                              isSelected && tl.selectedBlock,
+                            ]}
+                            onPress={() => {
+                              setSelectedOverlay(o.id);
+                              videoRef.current?.seek(o.startTime);
+                              setCurrentTime(o.startTime);
+                            }}
+                          >
+                            <RNText numberOfLines={1} style={tl.blockText}>
+                              Image
+                            </RNText>
+                          </TouchableOpacity>
+                        );
+                      })}
+                  </View>
+
+                  {/* Audio/Music Lane */}
+                  <View style={tl.lane}>
+                    <RNText style={tl.laneLabel}>Audio</RNText>
+                    {musicTracks.map(track => {
+                      const isSelected = selectedMusicTrack === track.id;
+                      return (
+                        <TouchableOpacity
+                          key={track.id}
+                          style={[
+                            tl.block,
+                            tl.audioBlock,
+                            {
+                              left: track.startTime * TIMELINE_SCALE,
+                              width: Math.max(30, (track.endTime - track.startTime) * TIMELINE_SCALE),
+                            },
+                            isSelected && tl.selectedBlock,
+                          ]}
+                          onPress={() => {
+                            setSelectedMusicTrack(track.id);
+                            videoRef.current?.seek(track.startTime);
+                            setCurrentTime(track.startTime);
+                          }}
+                        >
+                          <RNText numberOfLines={1} style={tl.blockText}>
+                            🎵 {track.name} ({(track.volume * 100).toFixed(0)}%)
+                          </RNText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </ScrollView>
             </View>
 
             {/* Controls row */}
@@ -921,7 +1582,55 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                       <Text style={styles.srcBtnLabel}>Use Template</Text>
                     </TouchableOpacity>
                   </View>
+                  <CustomSlider label="Trim Start" min={0} max={Math.min(99, trimEnd - 1)} step={1} value={trimStart} onChange={(val) => { setTrimStart(val); commitHistory({ trimStart: val }); }} suffix="%" />
+                  <CustomSlider label="Trim End" min={Math.max(1, trimStart + 1)} max={100} step={1} value={trimEnd} onChange={(val) => { setTrimEnd(val); commitHistory({ trimEnd: val }); }} suffix="%" />
                   <CustomSlider label="Volume" min={0} max={1} step={0.05} value={volume} onChange={setVolume} suffix="%" />
+
+                  <Text style={[styles.subTitle, { marginTop: 16 }]}>Merge Intro/Outro Videos</Text>
+                  <View style={[styles.rowBtns, { marginBottom: 8 }]}>
+                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B' }]} onPress={() => addMergeClip('start')}>
+                      <Icon.Video size={16} color="#fff" />
+                      <Text style={styles.srcBtnLabel}>Add Intro Clip</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B' }]} onPress={() => addMergeClip('end')}>
+                      <Icon.Video size={16} color="#fff" />
+                      <Text style={styles.srcBtnLabel}>Add Outro Clip</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Start Clips List */}
+                  {videoMergeClips.start.length > 0 && (
+                    <View style={{ marginVertical: 6 }}>
+                      <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: 'bold' }}>Intro Clips:</Text>
+                      {videoMergeClips.start.map((clip) => (
+                        <View key={clip.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}>
+                          <RNText numberOfLines={1} style={{ color: '#F8FAFC', fontSize: 12, flex: 1 }}>
+                            ⏮ {clip.name}
+                          </RNText>
+                          <TouchableOpacity onPress={() => deleteMergeClip('start', clip.id)} style={{ paddingHorizontal: 8 }}>
+                            <RNText style={{ color: '#EF4444', fontSize: 12 }}>Remove</RNText>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* End Clips List */}
+                  {videoMergeClips.end.length > 0 && (
+                    <View style={{ marginVertical: 6 }}>
+                      <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: 'bold' }}>Outro Clips:</Text>
+                      {videoMergeClips.end.map((clip) => (
+                        <View key={clip.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}>
+                          <RNText numberOfLines={1} style={{ color: '#F8FAFC', fontSize: 12, flex: 1 }}>
+                            ⏭ {clip.name}
+                          </RNText>
+                          <TouchableOpacity onPress={() => deleteMergeClip('end', clip.id)} style={{ paddingHorizontal: 8 }}>
+                            <RNText style={{ color: '#EF4444', fontSize: 12 }}>Remove</RNText>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -966,6 +1675,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                             style={[styles.colorDot, { backgroundColor: c }, selectedItem.color === c && styles.colorDotActive]} />
                         ))}
                       </ScrollView>
+                      <CustomSlider label="Start Time (Video Offset)" min={0} max={Math.max(0, (selectedItem.endTime || 10) - 0.5)} step={0.1} value={selectedItem.startTime ?? 0} onChange={v => updateOverlay(selectedItem.id, { startTime: v })} suffix="s" />
+                      <CustomSlider label="End Time (Video Offset)" min={(selectedItem.startTime ?? 0) + 0.5} max={duration || 10} step={0.1} value={selectedItem.endTime ?? (duration || 10)} onChange={v => updateOverlay(selectedItem.id, { endTime: v })} suffix="s" />
                       <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteOverlay(selectedItem.id)}>
                         <Icon.Trash size={14} color="#fff" />
                         <Text style={styles.deleteBtnLabel}>Remove Overlay</Text>
@@ -979,6 +1690,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                       <Text style={styles.subTitle}>Edit Image Overlay</Text>
                       <CustomSlider label="Opacity" min={0.1} max={1} step={0.05} value={selectedItem.opacity ?? 1} onChange={v => updateOverlay(selectedItem.id, { opacity: v })} />
                       <CustomSlider label="Corner Radius" min={0} max={60} step={1} value={selectedItem.borderRadius ?? 0} onChange={v => updateOverlay(selectedItem.id, { borderRadius: v })} />
+                      <CustomSlider label="Start Time (Video Offset)" min={0} max={Math.max(0, (selectedItem.endTime || 10) - 0.5)} step={0.1} value={selectedItem.startTime ?? 0} onChange={v => updateOverlay(selectedItem.id, { startTime: v })} suffix="s" />
+                      <CustomSlider label="End Time (Video Offset)" min={(selectedItem.startTime ?? 0) + 0.5} max={duration || 10} step={0.1} value={selectedItem.endTime ?? (duration || 10)} onChange={v => updateOverlay(selectedItem.id, { endTime: v })} suffix="s" />
                       <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteOverlay(selectedItem.id)}>
                         <Icon.Trash size={14} color="#fff" />
                         <Text style={styles.deleteBtnLabel}>Remove Overlay</Text>
@@ -998,21 +1711,93 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
               {activeTab === 'music' && (
                 <View style={styles.panel}>
                   <Text style={styles.panelTitle}>Background Music</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.musicScroll}>
-                    {PRESET_MUSIC.map(m => (
-                      <TouchableOpacity
-                        key={m.id}
-                        style={[styles.musicCard, selectedMusic === m.id && styles.musicCardActive]}
-                        onPress={() => { setSelectedMusic(m.id); commitHistory({ music: m.id }); }}
-                      >
-                        <Text style={styles.musicEmoji}>{m.emoji}</Text>
-                        <Text style={[styles.musicName, selectedMusic === m.id && styles.musicNameActive]} numberOfLines={2}>{m.name}</Text>
-                        <Text style={styles.musicDur}>{m.duration}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  {selectedMusic !== 'none' && (
-                    <CustomSlider label="Music Volume" min={0} max={1} step={0.05} value={musicVolume} onChange={v => { setMusicVolume(v); commitHistory({ musicVol: v }); }} />
+                  
+                  <TouchableOpacity
+                    style={[styles.srcBtn, { marginBottom: 12 }]}
+                    onPress={() => setITunesModalVisible(true)}
+                  >
+                    <Icon.Music size={18} color="#fff" />
+                    <Text style={styles.srcBtnLabel}>Search & Add iTunes Music</Text>
+                  </TouchableOpacity>
+
+                  {musicTracks.length > 0 && (
+                    <View style={{ marginBottom: 16 }}>
+                      <Text style={styles.subTitle}>Tracks List</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                        {musicTracks.map(t => {
+                          const isSelected = selectedMusicTrack === t.id;
+                          return (
+                            <TouchableOpacity
+                              key={t.id}
+                              style={[styles.musicCard, isSelected && styles.musicCardActive, { width: 120, height: 70 }]}
+                              onPress={() => setSelectedMusicTrack(t.id)}
+                            >
+                              <Text style={[styles.musicName, isSelected && styles.musicNameActive]} numberOfLines={1}>
+                                🎵 {t.name}
+                              </Text>
+                              <Text style={styles.musicDur}>
+                                {t.startTime.toFixed(1)}s - {t.endTime.toFixed(1)}s
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Selected Track Editor */}
+                  {(() => {
+                    const track = musicTracks.find(t => t.id === selectedMusicTrack);
+                    if (!track) return null;
+                    return (
+                      <View style={styles.overlayEditor}>
+                        <Text style={styles.subTitle}>Edit Music Track: {track.name}</Text>
+                        
+                        <CustomSlider
+                          label="Volume"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={track.volume}
+                          onChange={v => updateMusicTrack(track.id, { volume: v })}
+                          suffix="%"
+                        />
+
+                        <CustomSlider
+                          label="Start Time (Video Offset)"
+                          min={0}
+                          max={Math.max(0, track.endTime - 0.5)}
+                          step={0.1}
+                          value={track.startTime}
+                          onChange={v => updateMusicTrack(track.id, { startTime: v })}
+                          suffix="s"
+                        />
+
+                        <CustomSlider
+                          label="End Time (Video Offset)"
+                          min={track.startTime + 0.5}
+                          max={duration || 10}
+                          step={0.1}
+                          value={track.endTime}
+                          onChange={v => updateMusicTrack(track.id, { endTime: v })}
+                          suffix="s"
+                        />
+
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => deleteMusicTrack(track.id)}
+                        >
+                          <Icon.Trash size={14} color="#fff" />
+                          <Text style={styles.deleteBtnLabel}>Remove Music Track</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })()}
+
+                  {musicTracks.length === 0 && (
+                    <View style={styles.emptyPanel}>
+                      <Text style={styles.emptyPanelText}>No background music tracks added yet.</Text>
+                    </View>
                   )}
                 </View>
               )}
@@ -1064,7 +1849,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   {/* Summary */}
                   <View style={styles.summaryCard}>
                     <SummaryRow label="Filter" value={FILTER_PRESETS.find(f => f.id === filterPreset)?.name ?? 'None'} />
-                    <SummaryRow label="Music" value={PRESET_MUSIC.find(m => m.id === selectedMusic)?.name ?? 'None'} />
+                    <SummaryRow label="Music" value={musicTracks.length > 0 ? `${musicTracks.length} track(s)` : 'None'} />
                     <SummaryRow label="Speed" value={`${playbackRate}×`} />
                     <SummaryRow label="Overlays" value={`${overlays.length} element(s)`} />
                   </View>
@@ -1146,8 +1931,17 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
               {VIDEOS_TEMPLATES.map(t => (
                 <TouchableOpacity key={t.id} style={styles.templateGridItem} onPress={() => selectTemplate(t)}>
                   <View style={styles.templateGridCard}>
-                    <View style={styles.templateGridThumb}>
-                      <Icon.Play size={20} color="#fff" />
+                    <View style={[styles.templateGridThumb, { position: 'relative', overflow: 'hidden' }]}>
+                      {t.thumbnail ? (
+                        <RNImage
+                          source={getThumbnailSource(t.thumbnail)}
+                          style={StyleSheet.absoluteFillObject}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }}>
+                        <Icon.Play size={20} color="#fff" />
+                      </View>
                     </View>
                     <Text style={styles.templateGridTitle} numberOfLines={2}>{t.title}</Text>
                     <Text style={styles.templateGridMeta}>{t.width} × {t.height}</Text>
@@ -1211,6 +2005,97 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
           </View>
         </View>
       </Modal>
+
+      {/* ── iTunes Music Search Modal ── */}
+      <Modal visible={iTunesModalVisible} animationType="slide" transparent onRequestClose={() => setITunesModalVisible(false)}>
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { height: '80%' }]}>
+            <Title style={styles.modalTitle}>Search & Add Music</Title>
+            
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <RNTextInput
+                value={iTunesQuery}
+                onChangeText={setITunesQuery}
+                placeholder="Search songs, artists, genres..."
+                placeholderTextColor="#94A3B8"
+                style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                onSubmitEditing={searchITunes}
+              />
+              <Button mode="contained" buttonColor="#df103f" textColor="#fff" style={{ height: 46 }} onPress={searchITunes} loading={searchingITunes}>
+                Search
+              </Button>
+            </View>
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {searchingITunes && <ActivityIndicator size="large" color="#df103f" style={{ marginVertical: 20 }} />}
+              {!searchingITunes && iTunesResults.length === 0 && (
+                <RNText style={{ color: '#64748B', textAlign: 'center', marginVertical: 40 }}>
+                  No tracks found. Type a query and search.
+                </RNText>
+              )}
+              {iTunesResults.map((track) => {
+                const isDownloading = downloadingTrackId === track.trackId;
+                const isPlayingPreview = previewTrackUrl === track.previewUrl && !previewPaused;
+
+                return (
+                  <View key={track.trackId} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1E293B' }}>
+                    <RNImage source={{ uri: track.artworkUrl60 || track.artworkUrl100 }} style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: '#1E293B' }} />
+                    <View style={{ flex: 1, marginHorizontal: 12 }}>
+                      <RNText numberOfLines={1} style={{ color: '#F8FAFC', fontSize: 13, fontWeight: '700' }}>{track.trackName}</RNText>
+                      <RNText numberOfLines={1} style={{ color: '#94A3B8', fontSize: 11 }}>{track.artistName}</RNText>
+                    </View>
+                    
+                    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (previewTrackUrl === track.previewUrl) {
+                            setPreviewPaused(p => !p);
+                          } else {
+                            setPreviewTrackUrl(track.previewUrl);
+                            setPreviewPaused(false);
+                          }
+                        }}
+                        style={{ padding: 8, backgroundColor: '#1E293B', borderRadius: 20 }}
+                      >
+                        <RNText style={{ fontSize: 12, color: '#FFF' }}>{isPlayingPreview ? '⏸' : '▶'}</RNText>
+                      </TouchableOpacity>
+                      
+                      <Button
+                        mode="contained"
+                        compact
+                        buttonColor="#df103f"
+                        textColor="#fff"
+                        loading={isDownloading}
+                        disabled={isDownloading}
+                        onPress={() => downloadAndUseITunesTrack(track)}
+                      >
+                        Use
+                      </Button>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* Hidden Video element for playing the active iTunes preview track inside the modal */}
+            {previewTrackUrl && (
+              <Video
+                source={{ uri: previewTrackUrl }}
+                paused={previewPaused}
+                // audioOnly={true}
+                onEnd={() => setPreviewPaused(true)}
+                onError={() => Alert.alert('Preview Error', 'Could not play audio preview.')}
+              />
+            )}
+
+            <View style={styles.modalActions}>
+              <Button mode="outlined" textColor="#64748B" style={styles.modalBtn} onPress={() => { setITunesModalVisible(false); setPreviewTrackUrl(null); setPreviewPaused(true); }}>
+                Close
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1227,7 +2112,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#060A12', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0 },
+  safe: { flex: 1, backgroundColor: '#060A12' },
   flex: { flex: 1 },
 
   // Header
@@ -1349,9 +2234,9 @@ const styles = StyleSheet.create({
   debugPanel: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.45)', padding: 8, borderRadius: 8 },
   debugText: { color: '#94A3B8', fontSize: 11 },
   templatesRow: { width: '100%', marginTop: 12 },
-  templateHeading: { color: '#64748B', fontSize: 11, fontWeight: '700', marginBottom: 6 },
-  templateCard: { width: 96, marginRight: 8, alignItems: 'center' },
-  templateThumb: { width: 88, height: 56, borderRadius: 8, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  templateHeading: { color: '#64748B', fontSize: 11, fontWeight: '700', marginBottom: 6, marginHorizontal: 8 },
+  templateCard: { width: 100, marginRight: 8, alignItems: 'center' },
+  templateThumb: { width: 92, height: 80, borderRadius: 8, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
   templateTitle: { color: '#F8FAFC', fontSize: 12, fontWeight: '700', width: 88, textAlign: 'center' },
   // Templates modal grid
   templatesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 12 },
@@ -1360,4 +2245,132 @@ const styles = StyleSheet.create({
   templateGridThumb: { width: '100%', height: 110, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   templateGridTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a', textAlign: 'center' },
   templateGridMeta: { fontSize: 12, color: '#64748b', marginTop: 6 },
+});
+
+const tl = StyleSheet.create({
+  container: {
+    height: 160,
+    backgroundColor: '#0F172A',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#1E293B',
+    position: 'relative',
+    marginVertical: 10,
+  },
+  playhead: {
+    position: 'absolute',
+    left: (screenWidth - 32) / 2 + 16,
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: '#EF4444',
+    zIndex: 100,
+    pointerEvents: 'none',
+  },
+  playheadCap: {
+    position: 'absolute',
+    top: 0,
+    left: -5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#EF4444',
+  },
+  scrollContent: {
+    paddingVertical: 8,
+  },
+  tracksArea: {
+    position: 'relative',
+    height: 120,
+  },
+  ruler: {
+    height: 20,
+    position: 'relative',
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  tick: {
+    position: 'absolute',
+    bottom: 0,
+    alignItems: 'center',
+    width: 40,
+    marginLeft: -20,
+  },
+  tickLine: {
+    width: 1,
+    height: 6,
+    backgroundColor: '#475569',
+  },
+  tickText: {
+    fontSize: 9,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  lane: {
+    height: 26,
+    position: 'relative',
+    marginVertical: 2,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.3)',
+    borderRadius: 4,
+  },
+  videoLane: {
+    height: 32,
+    backgroundColor: '#1E293B',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  videoTrimmedBg: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+    borderLeftWidth: 2,
+    borderRightWidth: 2,
+    borderColor: '#EF4444',
+  },
+  block: {
+    position: 'absolute',
+    height: 20,
+    borderRadius: 4,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    borderWidth: 1,
+  },
+  selectedBlock: {
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    shadowColor: '#FFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  textBlock: {
+    backgroundColor: 'rgba(225, 48, 108, 0.35)',
+    borderColor: 'rgba(225, 48, 108, 0.7)',
+  },
+  imageBlock: {
+    backgroundColor: 'rgba(16, 185, 129, 0.35)',
+    borderColor: 'rgba(16, 185, 129, 0.7)',
+  },
+  audioBlock: {
+    backgroundColor: 'rgba(139, 92, 246, 0.35)',
+    borderColor: 'rgba(139, 92, 246, 0.7)',
+  },
+  blockText: {
+    fontSize: 10,
+    color: '#FFF',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  laneLabel: {
+    position: 'absolute',
+    left: 8,
+    color: '#94A3B8',
+    fontSize: 8,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    zIndex: 10,
+  },
 });

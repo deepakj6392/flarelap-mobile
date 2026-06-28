@@ -16,6 +16,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Social Media Promo",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_1.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_1.mp4",
     },
     {
@@ -23,6 +24,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Product Showcase",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_2.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_2.mp4",
     },
     {
@@ -30,6 +32,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Event Announcement",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_3.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_3.mp4",
     },
     {
@@ -37,6 +40,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Brand Story",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_4.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_4.mp4",
     },
     {
@@ -44,6 +48,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Tutorial Video",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_5.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_5.mp4",
     },
     {
@@ -51,6 +56,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Customer Testimonial",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_6.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_6.mp4",   
     },
     {
@@ -58,6 +64,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Seasonal Sale",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_7.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_7.mp4",
     },
     {
@@ -65,6 +72,7 @@ export const VIDEOS_TEMPLATES = [
         title: "Behind the Scenes",
         width: 440,
         height: 780,
+        thumbnail: "assets/images/video/v_8.png",
         videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_8.mp4",
     },
 ]
