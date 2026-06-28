@@ -381,7 +381,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   // rendering-mode toggle to work around platform surface issues (Android SurfaceView vs TextureView)
-  const [useTexture, setUseTexture] = useState<boolean>(Platform.OS === 'android');
+  const [useTexture, setUseTexture] = useState<boolean>(false);
   const [videoKeySeed, setVideoKeySeed] = useState<number>(0);
 
   // Trimming (percentage 0 to 100)
@@ -477,6 +477,61 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     return 'mp4';
   };
 
+  const handleVideoLoad = useCallback((data: any) => {
+    console.log('Video onLoad', { duration: data.duration, size: data.naturalSize });
+    setDuration(data.duration);
+    if (data.naturalSize) {
+      setNaturalSize({ width: data.naturalSize.width, height: data.naturalSize.height });
+    }
+    setVideoLoading(false);
+    try {
+      setTimeout(() => {
+        if (videoRef.current?.seek) {
+          const t = Math.max(0, currentTime || 0);
+          videoRef.current.seek(t + 0.001);
+        }
+      }, 150);
+    } catch (e) {}
+  }, [currentTime]);
+
+  const handleVideoReady = useCallback(() => {
+    setVideoLoading(false);
+    setVideoError(null);
+    if (Platform.OS === 'android') {
+      setTimeout(() => {
+        try { videoRef.current?.seek(0.001); } catch { }
+      }, 100);
+    }
+  }, []);
+
+  const handleVideoProgress = useCallback((data: any) => {
+    const cur = data.currentTime;
+    setCurrentTime(cur);
+    const loopStart = (trimStart / 100) * duration;
+    const loopEnd = (trimEnd / 100) * duration;
+    if (duration > 0 && (cur >= loopEnd || cur < loopStart - 0.5)) {
+      videoRef.current?.seek(loopStart);
+      setCurrentTime(loopStart);
+    }
+  }, [duration, trimStart, trimEnd]);
+
+  const handleVideoEnd = useCallback(() => {
+    const loopStart = (trimStart / 100) * duration;
+    videoRef.current?.seek(loopStart);
+    setCurrentTime(loopStart);
+  }, [duration, trimStart]);
+
+  const handleVideoLoadStart = useCallback(() => {
+    console.log('Video onLoadStart');
+    setVideoLoading(true);
+  }, []);
+
+  const handleVideoError = useCallback((e: any) => {
+    console.warn('Video playback error', e);
+    setVideoError(e?.error?.localizedDescription || JSON.stringify(e) || 'Playback error');
+    setVideoLoading(false);
+  }, []);
+
   const cacheRemoteVideoForPlayback = useCallback(async (uri: string) => {
     if (!isRemoteVideoUri(uri)) return uri;
     if (remoteVideoCache.current[uri]) return remoteVideoCache.current[uri];
@@ -500,7 +555,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const loadVideoSource = useCallback(async (uri: string, options?: { autoplay?: boolean; clearOverlays?: boolean; closeTemplates?: boolean }) => {
     const requestId = ++loadRequestId.current;
     setVideoUri(uri);
-    setPlaybackUri(isRemoteVideoUri(uri) ? null : uri);
+    setPlaybackUri(uri);
     setCurrentTime(0);
     setDuration(0);
     setPaused(!(options?.autoplay ?? true));
@@ -532,7 +587,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       if (requestId !== loadRequestId.current) return;
       setPlaybackUri(uri);
       setVideoKeySeed(s => s + 1);
-      setVideoError(err?.message || 'Unable to load video.');
+      console.warn('Playback caching failed, streaming fallback active:', err);
     } finally {
       if (requestId === loadRequestId.current) {
         setVideoLoading(false);
@@ -1176,7 +1231,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   key={`${playbackUri}_${videoKeySeed}`}
                   ref={videoRef}
                   source={{ uri: playbackUri }}
-                  style={[styles.videoFill, { backgroundColor: '#000' }]}
+                  style={styles.videoFill}
                   paused={paused}
                   muted={muted}
                   volume={volume}
@@ -1184,57 +1239,14 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   useTextureView={Platform.OS === 'android' ? useTexture : undefined}
                   resizeMode="contain"
                   repeat={false}
-                  controls={true}
-                  onLoad={(data: any) => {
-                    console.log('Video onLoad', { duration: data.duration, size: data.naturalSize });
-                    setDuration(data.duration);
-                    if (data.naturalSize) {
-                      setNaturalSize({ width: data.naturalSize.width, height: data.naturalSize.height });
-                    }
-                    setVideoLoading(false);
-                    // nudge a tiny seek to force first-frame decode on some devices
-                    try {
-                      setTimeout(() => {
-                        if (videoRef.current?.seek) {
-                          const t = Math.max(0, currentTime || 0);
-                          console.log('Nudging seek to', t + 0.001);
-                          videoRef.current.seek(t + 0.001);
-                        }
-                      }, 150);
-                    } catch (e) { console.warn('Seek nudge failed', e); }
-                  }}
-                  onReadyForDisplay={() => {
-                    setVideoLoading(false);
-                    setVideoError(null);
-                    // Force first frame render on Android
-                    if (Platform.OS === 'android') {
-                      setTimeout(() => {
-                        try { videoRef.current?.seek(0.001); } catch { }
-                      }, 100);
-                    }
-                  }}
-                  onProgress={(data: any) => {
-                    const cur = data.currentTime;
-                    setCurrentTime(cur);
-                    const loopStart = (trimStart / 100) * duration;
-                    const loopEnd = (trimEnd / 100) * duration;
-                    if (duration > 0 && (cur >= loopEnd || cur < loopStart - 0.5)) {
-                      videoRef.current?.seek(loopStart);
-                      setCurrentTime(loopStart);
-                    }
-                  }}
-                  onEnd={() => {
-                    const loopStart = (trimStart / 100) * duration;
-                    videoRef.current?.seek(loopStart);
-                    setCurrentTime(loopStart);
-                  }}
-                  onLoadStart={() => { console.log('Video onLoadStart'); setVideoLoading(true); }}
-                  onBuffer={(b: any) => { console.log('Video onBuffer', b); setVideoLoading(!!b?.isBuffering); }}
-                  onError={(e: any) => {
-                    console.warn('Video playback error', e);
-                    setVideoError(e?.error?.localizedDescription || (e?.error && JSON.stringify(e.error)) || JSON.stringify(e) || 'Playback error');
-                    setVideoLoading(false);
-                  }}
+                  controls={false}
+                  onLoad={handleVideoLoad}
+                  onReadyForDisplay={handleVideoReady}
+                  onProgress={handleVideoProgress}
+                  onEnd={handleVideoEnd}
+                  onLoadStart={handleVideoLoadStart}
+                  onBuffer={(b: any) => { console.log('Video onBuffer', b); }}
+                  onError={handleVideoError}
                 />
               )}
 
