@@ -367,11 +367,10 @@ const ms = StyleSheet.create({
 export default function VideoEditor({ route, navigation }: { route?: any; navigation?: any }) {
   // Video state
   const videoRef = useRef<any>(null);
-  const remoteVideoCache = useRef<Record<string, string>>({});
   const loadRequestId = useRef(0);
   const initialVideoUri = route?.params?.videoUri ?? null;
   const [videoUri, setVideoUri] = useState<string | null>(initialVideoUri);
-  const [playbackUri, setPlaybackUri] = useState<string | null>(initialVideoUri && !/^https?:\/\//i.test(initialVideoUri) ? initialVideoUri : null);
+  const [playbackUri, setPlaybackUri] = useState<string | null>(initialVideoUri);
   const [paused, setPaused] = useState(true);
   const [muted, setMuted] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -532,25 +531,6 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     setVideoLoading(false);
   }, []);
 
-  const cacheRemoteVideoForPlayback = useCallback(async (uri: string) => {
-    if (!isRemoteVideoUri(uri)) return uri;
-    if (remoteVideoCache.current[uri]) return remoteVideoCache.current[uri];
-
-    const RNFS = (() => { try { return require('react-native-fs'); } catch { return null; } })();
-    if (!RNFS) return uri;
-
-    const tmpDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
-    const filePath = `${tmpDir}/flarelap_video_${Date.now()}.${getVideoExtension(uri)}`;
-    const download = RNFS.downloadFile({ fromUrl: uri, toFile: filePath });
-    const result = await download.promise;
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      throw new Error(`Unable to download video (${result.statusCode}).`);
-    }
-
-    const localUri = `file://${filePath}`;
-    remoteVideoCache.current[uri] = localUri;
-    return localUri;
-  }, []);
 
   const loadVideoSource = useCallback(async (uri: string, options?: { autoplay?: boolean; clearOverlays?: boolean; closeTemplates?: boolean }) => {
     const requestId = ++loadRequestId.current;
@@ -558,7 +538,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     setPlaybackUri(uri);
     setCurrentTime(0);
     setDuration(0);
-    setPaused(!(options?.autoplay ?? true));
+    setPaused(options?.autoplay ?? true);
     setVideoError(null);
     setVideoLoading(true);
     setTrimStart(0);
@@ -577,23 +557,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       setTemplatesModalVisible(false);
     }
 
-    try {
-      const playableUri = await cacheRemoteVideoForPlayback(uri);
-      if (requestId !== loadRequestId.current) return;
-      setPlaybackUri(playableUri);
-      setVideoKeySeed(s => s + 1);
-      setTimeout(() => { try { videoRef.current?.seek(0.001); } catch { } }, isRemoteVideoUri(uri) ? 300 : 140);
-    } catch (err: any) {
-      if (requestId !== loadRequestId.current) return;
-      setPlaybackUri(uri);
-      setVideoKeySeed(s => s + 1);
-      console.warn('Playback caching failed, streaming fallback active:', err);
-    } finally {
-      if (requestId === loadRequestId.current) {
-        setVideoLoading(false);
-      }
-    }
-  }, [cacheRemoteVideoForPlayback]);
+    setVideoLoading(false);
+  }, []);
 
   const commitHistory = useCallback((patch?: Partial<HistoryEntry>) => {
     const entry: HistoryEntry = {
@@ -705,7 +670,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
 
   const selectTemplate = async (t: any) => {
     if (!t?.videoURL) return;
-    await loadVideoSource(t.videoURL, { autoplay: true, clearOverlays: true, closeTemplates: true });
+    await loadVideoSource(t.videoURL, { autoplay: false, clearOverlays: true, closeTemplates: true });
   };
 
   // iTunes search states & helpers
