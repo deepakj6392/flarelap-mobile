@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Flarelap</string>
+    <string name="facebook_app_id">2088397718395774</string>
+    <string name="facebook_client_token">669e82a408d498b78e5fb9b69e382875</string>
 </resources>

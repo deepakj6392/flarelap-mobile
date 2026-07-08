@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import { StatusBar } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SplashScreen from './src/screens/SplashScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -20,6 +20,9 @@ import QRCodeGeneratorScreen from './src/screens/QRCodeGeneratorScreen';
 import BusinessAdsScreen from './src/screens/BusinessAdsScreen';
 import CustomSizeScreen from './src/screens/CustomSizeScreen';
 import PromotionScreen from './src/screens/PromotionScreen';
+import SvgEditorScreen from './src/screens/SvgEditorScreen';
+
+export const navigationRef = createNavigationContainerRef();
 
 const Stack = createNativeStackNavigator();
 
@@ -38,7 +41,7 @@ function App(): React.JSX.Element {
     <PaperProvider theme={theme}>
       {/* Ensure status bar is visible on non-splash screens by default */}
       <StatusBar barStyle="light-content" hidden={false} />
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
@@ -56,6 +59,7 @@ function App(): React.JSX.Element {
           <Stack.Screen name="CustomSize" component={CustomSizeScreen} />
           <Stack.Screen name="Promotion" component={PromotionScreen} />
           <Stack.Screen name="QRCodeGenerator" component={QRCodeGeneratorScreen} />
+          <Stack.Screen name="SvgEditor" component={SvgEditorScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </PaperProvider>

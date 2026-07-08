@@ -17,15 +17,15 @@ export const VIDEOS_TEMPLATES = [
         width: 440,
         height: 780,
         thumbnail: "assets/images/video/v_1.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_1.mp4",
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_1.mp4",
     },
     {
         id: 2,
         title: "Product Showcase",
-        width: 440,
+        width: 440, 
         height: 780,
         thumbnail: "assets/images/video/v_2.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_2.mp4",
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_2.mp4",
     },
     {
         id: 3,
@@ -33,7 +33,7 @@ export const VIDEOS_TEMPLATES = [
         width: 440,
         height: 780,
         thumbnail: "assets/images/video/v_3.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_3.mp4",
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_3.mp4",
     },
     {
         id: 4,
@@ -41,7 +41,7 @@ export const VIDEOS_TEMPLATES = [
         width: 440,
         height: 780,
         thumbnail: "assets/images/video/v_4.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_4.mp4",
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_4.mp4",
     },
     {
         id: 5,
@@ -49,7 +49,7 @@ export const VIDEOS_TEMPLATES = [
         width: 440,
         height: 780,
         thumbnail: "assets/images/video/v_5.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_5.mp4",
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_5.mp4",
     },
     {
         id: 6,
@@ -57,7 +57,7 @@ export const VIDEOS_TEMPLATES = [
         width: 440,
         height: 780,
         thumbnail: "assets/images/video/v_6.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_6.mp4",   
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_6.mp4",
     },
     {
         id: 7,
@@ -65,7 +65,7 @@ export const VIDEOS_TEMPLATES = [
         width: 440,
         height: 780,
         thumbnail: "assets/images/video/v_7.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_7.mp4",
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_7.mp4",
     },
     {
         id: 8,
@@ -73,6 +73,6 @@ export const VIDEOS_TEMPLATES = [
         width: 440,
         height: 780,
         thumbnail: "assets/images/video/v_8.png",
-        videoURL: "https://flarelap.s3.ap-south-1.amazonaws.com/videos/flarelap_video_8.mp4",
+        videoURL: "https://api.flarelap.com/videos/flarelap_video_8.mp4",
     },
 ]

@@ -19,6 +19,7 @@ import {
 import { Title, Button, TextInput, Text, ActivityIndicator, Portal, Modal } from 'react-native-paper';
 import Svg, { Rect, Circle, Polygon, Line, Path, SvgXml, Defs, ClipPath, Image as SvgImage } from 'react-native-svg';
 import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
 import { Template } from '../../../types/template';
 import { getAllTemplates, svgUrlToFabricJSON, FabricObject, svgStringToFabricJSON } from '../../services/template.service';
 import {
@@ -34,6 +35,7 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   CloseIcon,
+  ArrowLeftIcon,
   DownloadIcon,
   RotateIcon,
   TrashIcon,
@@ -1343,6 +1345,25 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     ]);
   };
 
+  const shareSvgFile = async (xmlContent: string) => {
+    try {
+      const ts = Date.now();
+      const tmpPath = `${RNFS.TemporaryDirectoryPath || RNFS.DocumentDirectoryPath}/flarelap_design_${ts}.svg`;
+      await RNFS.writeFile(tmpPath, xmlContent, 'utf8');
+
+      await Share.open({
+        url: `file://${tmpPath}`,
+        type: 'image/svg+xml',
+      });
+    } catch (err: any) {
+      console.warn('shareSvgFile failed', err);
+      const isCancel = err?.message?.toLowerCase().includes('cancel') || err?.toString().toLowerCase().includes('cancel');
+      if (!isCancel) {
+        Alert.alert('Share Failed', 'Failed to share the SVG file.');
+      }
+    }
+  };
+
   // Standalone SVG Exporter
   const handleExportSvg = () => {
     const exportOffsetX = svgText ? canvasMetrics.minX : 0;
@@ -1444,9 +1465,10 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
 </svg>`;
     }
 
-    Alert.alert('SVG Export Ready', 'Your custom Canva design is compiled. Look at details:', [
+    Alert.alert('SVG Export Ready', 'Your custom Canva design is compiled. What would you like to do?', [
+      { text: 'Share SVG File', onPress: () => shareSvgFile(finalSvg) },
       { text: 'Copy to Clipboard', onPress: () => Alert.alert('Copied', 'SVG XML text copied to clip!') },
-      { text: 'OK', style: 'cancel' },
+      { text: 'Cancel', style: 'cancel' },
     ]);
 
     // Print SVG structure in console log for inspection
@@ -1461,7 +1483,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         {/* Top Header Row */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerBtn}>
-            <CloseIcon size={20} color="#0F172A" />
+            <ArrowLeftIcon size={20} color="#0F172A" />
           </TouchableOpacity>
           <Title style={styles.headerTitle}>{category}</Title>
           <View style={styles.headerRight}>

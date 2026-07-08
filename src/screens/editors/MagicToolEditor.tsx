@@ -26,11 +26,11 @@ import {
   Dimensions,
   ActivityIndicator,
   Modal,
-  Share,
   TextInput as RNTextInput,
   FlatList,
   Platform,
 } from 'react-native';
+import Share from 'react-native-share';
 import { Text, Title } from 'react-native-paper';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -91,6 +91,11 @@ const Icon = {
   Close: ({ s = 18, c = '#F8FAFC' }: { s?: number; c?: string }) => (
     <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round">
       <Path d="M18 6L6 18M6 6l12 12" />
+    </Svg>
+  ),
+  Back: ({ s = 20, c = '#F8FAFC' }: { s?: number; c?: string }) => (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M19 12H5M12 19l-7-7 7-7" />
     </Svg>
   ),
   Check: ({ s = 18, c = '#F8FAFC' }: { s?: number; c?: string }) => (
@@ -402,7 +407,11 @@ export default function MagicToolEditor({ navigation, route }: { navigation?: an
     setExporting(true);
     try {
       const uri = await captureRef(canvasRef, { format: 'png', quality: 1 });
-      await Share.share({ url: uri, message: 'Created with Flarelap Magic Tool ✨' });
+      await Share.open({
+        url: uri,
+        type: 'image/png',
+        message: 'Created with Flarelap Magic Tool ✨',
+      });
     } catch (e: any) {
       Alert.alert('Export Failed', e?.message || 'Unknown error');
     } finally {
@@ -429,7 +438,7 @@ export default function MagicToolEditor({ navigation, route }: { navigation?: an
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.hBtn}>
-          <Icon.Close s={20} />
+          <Icon.Back s={20} />
         </TouchableOpacity>
         <Title style={styles.hTitle}>✨ Magic Tool</Title>
         <View style={styles.hRight}>

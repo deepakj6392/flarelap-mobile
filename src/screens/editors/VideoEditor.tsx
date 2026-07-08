@@ -23,6 +23,7 @@ import {
   TextInput as RNTextInput,
 } from 'react-native';
 import { Title, Button, Text } from 'react-native-paper';
+import Share from 'react-native-share';
 import Video from 'react-native-video';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
@@ -140,6 +141,11 @@ const Icon = {
       <Path d="M18 6L6 18M6 6l12 12" />
     </Svg>
   ),
+  Back: ({ size = 20, color = '#F8FAFC' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M19 12H5M12 19l-7-7 7-7" />
+    </Svg>
+  ),
   Check: ({ size = 20, color = '#F8FAFC' }) => (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <Path d="M20 6L9 17l-5-5" />
@@ -226,6 +232,18 @@ const Icon = {
       <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
     </Svg>
   ),
+  Eye: ({ size = 20, color = '#F8FAFC' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <Circle cx="12" cy="12" r="3" />
+    </Svg>
+  ),
+  EyeOff: ({ size = 20, color = '#F8FAFC' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <Path d="M1 1l22 22" />
+    </Svg>
+  ),
   Trash: ({ size = 16, color = '#EF4444' }) => (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -238,21 +256,35 @@ interface SliderProps { value: number; min: number; max: number; step?: number; 
 
 function CustomSlider({ value, min, max, step = 1, onChange, label, suffix = '' }: SliderProps) {
   const W = screenWidth - 96;
-  const pr = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => handle(e.nativeEvent.locationX),
-    onPanResponderMove: (e) => handle(e.nativeEvent.locationX),
-  })).current;
+  const startX = useRef(0);
+  const startValRef = useRef(0);
 
-  const handle = (lx: number) => {
-    let r = lx / W;
-    r = Math.max(0, Math.min(1, r));
-    let v = min + r * (max - min);
-    v = Math.round(v / step) * step;
-    v = Math.max(min, Math.min(max, v));
-    onChange(v);
-  };
+  const pr = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e, gestureState) => {
+        const initialLocationX = e.nativeEvent.locationX;
+        let r = initialLocationX / W;
+        r = Math.max(0, Math.min(1, r));
+        const startVal = min + r * (max - min);
+        let steppedVal = Math.round(startVal / step) * step;
+        steppedVal = Math.max(min, Math.min(max, steppedVal));
+
+        startX.current = e.nativeEvent.pageX;
+        startValRef.current = steppedVal;
+        onChange(steppedVal);
+      },
+      onPanResponderMove: (e, gestureState) => {
+        const deltaX = gestureState.dx;
+        const deltaValue = (deltaX / W) * (max - min);
+        let newValue = startValRef.current + deltaValue;
+        let steppedVal = Math.round(newValue / step) * step;
+        steppedVal = Math.max(min, Math.min(max, steppedVal));
+        onChange(steppedVal);
+      },
+    })
+  ).current;
 
   const pct = ((value - min) / (max - min)) * 100;
 
@@ -264,8 +296,8 @@ function CustomSlider({ value, min, max, step = 1, onChange, label, suffix = '' 
       </View>
       <View style={[ss.track, { width: W }]} {...pr.panHandlers}>
         <View style={ss.bg} />
-        <View style={[ss.fill, { width: `${pct}%` }]} />
-        <View style={[ss.thumb, { left: `${pct}%`, transform: [{ translateX: -9 }] }]} />
+        <View style={[ss.fill, { width: `${pct}%` }]} pointerEvents="none" />
+        <View style={[ss.thumb, { left: `${pct}%`, transform: [{ translateX: -9 }] }]} pointerEvents="none" />
       </View>
     </View>
   );
@@ -405,6 +437,16 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [musicVolume, setMusicVolume] = useState(0.7);
   const [iTunesModalVisible, setITunesModalVisible] = useState(false);
 
+  // Slideshow creation state
+  const [slideshowModalVisible, setSlideshowModalVisible] = useState(false);
+  const [slideshowImages, setSlideshowImages] = useState<Array<{
+    id: string;
+    uri: string;
+    duration: number;
+    effect: string;
+  }>>([]);
+  const [generatingSlideshow, setGeneratingSlideshow] = useState(false);
+
   // Video Merging
   const [videoMergeClips, setVideoMergeClips] = useState<{ start: MergeClip[]; end: MergeClip[]; }>({ start: [], end: [] });
 
@@ -423,6 +465,9 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
 
   // Export state
   const [exporting, setExporting] = useState(false);
+
+  // Timeline toggle state
+  const [showTimeline, setShowTimeline] = useState(true);
 
   // Undo/Redo
   type HistoryEntry = {
@@ -668,6 +713,92 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       }
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Unable to pick video.');
+    }
+  };
+
+  const openSlideshowModal = () => {
+    setSlideshowImages([]);
+    setSlideshowModalVisible(true);
+  };
+
+  const pickSlideshowImages = async () => {
+    try {
+      const res = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 1,
+        selectionLimit: 0,
+      });
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('Picker Error', res.errorMessage || res.errorCode);
+        return;
+      }
+      if (res.assets && res.assets.length > 0) {
+        const newImages = res.assets.map((asset, index) => ({
+          id: `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 5)}`,
+          uri: asset.uri || '',
+          duration: 3.0, // default 3 seconds
+          effect: 'fade', // default effect
+        })).filter(img => img.uri !== '');
+        
+        setSlideshowImages(prev => [...prev, ...newImages]);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Unable to pick images.');
+    }
+  };
+
+  const generateSlideshowVideo = async () => {
+    if (slideshowImages.length === 0) {
+      Alert.alert('No Images', 'Please add at least one image.');
+      return;
+    }
+    setGeneratingSlideshow(true);
+    try {
+      const formData = new FormData();
+      
+      // Extract durations and effects list
+      const durations = slideshowImages.map(img => img.duration);
+      const effects = slideshowImages.map(img => img.effect);
+      
+      formData.append('durations', JSON.stringify(durations));
+      formData.append('effects', JSON.stringify(effects));
+      
+      // Append images
+      for (let i = 0; i < slideshowImages.length; i++) {
+        const img = slideshowImages[i];
+        const preparedImg = await prepareFileForUpload(img.uri, 'image/png');
+        formData.append('images', preparedImg as any);
+      }
+      
+      console.log('Sending create-from-images request to https://ai.flarelap.com/video/create-from-images...');
+      const response = await fetch('https://ai.flarelap.com/video/create-from-images', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Accept: 'video/mp4, application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || `Server error HTTP ${response.status}`);
+      }
+      
+      const newVideoUri = await saveBlobResponseAsVideo(response);
+      console.log('Slideshow video created:', newVideoUri);
+      
+      // Load into editor
+      await loadVideoSource(newVideoUri, { autoplay: false, clearOverlays: true });
+      
+      setSlideshowModalVisible(false);
+      setSlideshowImages([]);
+      Alert.alert('Success 🎉', 'Slideshow video generated successfully and loaded into editor!');
+    } catch (err: any) {
+      console.error('Slideshow Generation Error:', err);
+      Alert.alert('Generation Failed', err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setGeneratingSlideshow(false);
     }
   };
 
@@ -1154,10 +1285,28 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       const finalDestPath = `${RNFS.DocumentDirectoryPath || RNFS.CachesDirectoryPath}/${finalFileName}`;
       await RNFS.copyFile(processedVideoUri.replace('file://', ''), finalDestPath);
 
+      const handleShareVideo = async () => {
+        try {
+          await Share.open({
+            url: `file://${finalDestPath}`,
+            type: 'video/mp4',
+          });
+        } catch (shareErr: any) {
+          console.warn('Share video failed', shareErr);
+          const isCancel = shareErr?.message?.toLowerCase().includes('cancel') || shareErr?.toString().toLowerCase().includes('cancel');
+          if (!isCancel) {
+            Alert.alert('Share Failed', 'Could not share the video.');
+          }
+        }
+      };
+
       Alert.alert(
         'Export Successful! 🎉',
         `Your video is saved at:\nDocuments/${finalFileName}`,
-        [{ text: 'OK' }],
+        [
+          { text: 'Share Video', onPress: handleShareVideo },
+          { text: 'OK', style: 'cancel' }
+        ],
       );
     } catch (err: any) {
       console.error('Export Error:', err);
@@ -1177,7 +1326,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         {/* ── Header ── */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.hBtn}>
-            <Icon.Close size={20} />
+            <Icon.Back size={20} />
           </TouchableOpacity>
           <Title style={styles.hTitle}>Video Editor</Title>
           <View style={styles.hRight}>
@@ -1262,14 +1411,16 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                 const isPlaying = !paused && currentTime >= track.startTime && currentTime <= track.endTime;
                 return (
                   <Video
-                    key={track.id}
-                    ref={r => { if (r) audioRefs.current[track.id] = r; }}
-                    source={{ uri: track.uri }}
-                    audioOnly={true}
-                    paused={!isPlaying}
-                    volume={muted ? 0 : track.volume * musicVolume}
-                    rate={playbackRate}
-                    repeat={false}
+                    {...({
+                      key: track.id,
+                      ref: (r: any) => { if (r) audioRefs.current[track.id] = r; },
+                      source: { uri: track.uri },
+                      audioOnly: true,
+                      paused: !isPlaying,
+                      volume: muted ? 0 : track.volume * musicVolume,
+                      rate: playbackRate,
+                      repeat: false
+                    } as any)}
                   />
                 );
               })}
@@ -1366,6 +1517,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   <Icon.Camera size={18} color="#fff" />
                   <Text style={styles.emptyBtnLabel}>Record</Text>
                 </TouchableOpacity>
+                <TouchableOpacity style={[styles.emptyBtn, { backgroundColor: '#10B981' }]} onPress={openSlideshowModal}>
+                  <Icon.Image size={18} color="#fff" />
+                  <Text style={styles.emptyBtnLabel}>Slideshow</Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -1375,153 +1530,172 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         {videoUri && (
           <View style={styles.playbackBar}>
             {/* Timeline Scrubber */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 4 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 4 }}>
               <RNText style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(currentTime)}</RNText>
+              
+              <TouchableOpacity
+                onPress={() => setShowTimeline(s => !s)}
+                style={{
+                  padding: 6,
+                  backgroundColor: '#1E293B',
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: '#334155',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                {showTimeline ? <Icon.Eye size={16} /> : <Icon.EyeOff size={16} />}
+              </TouchableOpacity>
+
               <RNText style={{ color: '#94A3B8', fontSize: 11 }}>{formatTime(duration)}</RNText>
             </View>
-            <View style={tl.container}>
-              <View style={tl.playhead}>
-                <View style={tl.playheadCap} />
-              </View>
 
-              <ScrollView
-                ref={timelineScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                scrollEventThrottle={16}
-                onScroll={handleTimelineScroll}
-                onScrollBeginDrag={() => { isDraggingTimeline.current = true; }}
-                onScrollEndDrag={() => { isDraggingTimeline.current = false; }}
-                onMomentumScrollEnd={() => { isDraggingTimeline.current = false; }}
-                contentContainerStyle={{ paddingLeft: playheadCenter, paddingRight: playheadCenter }}
-              >
-                <View style={{ width: Math.max(screenWidth - 32, duration * TIMELINE_SCALE), height: 135, position: 'relative' }}>
-                  {/* Ruler track */}
-                  <View style={tl.ruler}>
-                    {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => {
-                      if (i % 5 !== 0) return null;
-                      return (
-                        <View key={i} style={[tl.tick, { left: i * TIMELINE_SCALE }]}>
-                          <View style={tl.tickLine} />
-                          <RNText style={tl.tickText}>{formatTime(i)}</RNText>
-                        </View>
-                      );
-                    })}
-                  </View>
-
-                  {/* Video Lane */}
-                  <View style={[tl.lane, tl.videoLane]}>
-                    <RNText style={tl.laneLabel}>Video</RNText>
-                    <View
-                      style={[
-                        tl.videoTrimmedBg,
-                        {
-                          left: (trimStart / 100) * duration * TIMELINE_SCALE,
-                          width: ((trimEnd - trimStart) / 100) * duration * TIMELINE_SCALE,
-                        },
-                      ]}
-                    />
-                  </View>
-
-                  {/* Text Overlays Lane */}
-                  <View style={tl.lane}>
-                    <RNText style={tl.laneLabel}>Texts</RNText>
-                    {overlays
-                      .filter(o => o.type === 'text')
-                      .map(o => {
-                        const isSelected = selectedOverlay === o.id;
-                        return (
-                          <TouchableOpacity
-                            key={o.id}
-                            style={[
-                              tl.block,
-                              tl.textBlock,
-                              {
-                                left: o.startTime * TIMELINE_SCALE,
-                                width: Math.max(30, (o.endTime - o.startTime) * TIMELINE_SCALE),
-                              },
-                              isSelected && tl.selectedBlock,
-                            ]}
-                            onPress={() => {
-                              setSelectedOverlay(o.id);
-                              videoRef.current?.seek(o.startTime);
-                              setCurrentTime(o.startTime);
-                            }}
-                          >
-                            <RNText numberOfLines={1} style={tl.blockText}>
-                              {o.text || 'Text'}
-                            </RNText>
-                          </TouchableOpacity>
-                        );
-                      })}
-                  </View>
-
-                  {/* Image Overlays Lane */}
-                  <View style={tl.lane}>
-                    <RNText style={tl.laneLabel}>Images</RNText>
-                    {overlays
-                      .filter(o => o.type === 'image')
-                      .map(o => {
-                        const isSelected = selectedOverlay === o.id;
-                        return (
-                          <TouchableOpacity
-                            key={o.id}
-                            style={[
-                              tl.block,
-                              tl.imageBlock,
-                              {
-                                left: o.startTime * TIMELINE_SCALE,
-                                width: Math.max(30, (o.endTime - o.startTime) * TIMELINE_SCALE),
-                              },
-                              isSelected && tl.selectedBlock,
-                            ]}
-                            onPress={() => {
-                              setSelectedOverlay(o.id);
-                              videoRef.current?.seek(o.startTime);
-                              setCurrentTime(o.startTime);
-                            }}
-                          >
-                            <RNText numberOfLines={1} style={tl.blockText}>
-                              Image
-                            </RNText>
-                          </TouchableOpacity>
-                        );
-                      })}
-                  </View>
-
-                  {/* Audio/Music Lane */}
-                  <View style={tl.lane}>
-                    <RNText style={tl.laneLabel}>Audio</RNText>
-                    {musicTracks.map(track => {
-                      const isSelected = selectedMusicTrack === track.id;
-                      return (
-                        <TouchableOpacity
-                          key={track.id}
-                          style={[
-                            tl.block,
-                            tl.audioBlock,
-                            {
-                              left: track.startTime * TIMELINE_SCALE,
-                              width: Math.max(30, (track.endTime - track.startTime) * TIMELINE_SCALE),
-                            },
-                            isSelected && tl.selectedBlock,
-                          ]}
-                          onPress={() => {
-                            setSelectedMusicTrack(track.id);
-                            videoRef.current?.seek(track.startTime);
-                            setCurrentTime(track.startTime);
-                          }}
-                        >
-                          <RNText numberOfLines={1} style={tl.blockText}>
-                            🎵 {track.name} ({(track.volume * 100).toFixed(0)}%)
-                          </RNText>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+            {showTimeline && (
+              <View style={tl.container}>
+                <View style={tl.playhead}>
+                  <View style={tl.playheadCap} />
                 </View>
-              </ScrollView>
-            </View>
+
+                <ScrollView
+                  ref={timelineScrollRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  onScroll={handleTimelineScroll}
+                  onScrollBeginDrag={() => { isDraggingTimeline.current = true; }}
+                  onScrollEndDrag={() => { isDraggingTimeline.current = false; }}
+                  onMomentumScrollEnd={() => { isDraggingTimeline.current = false; }}
+                  contentContainerStyle={{ paddingLeft: playheadCenter, paddingRight: playheadCenter }}
+                >
+                  <View style={{ width: Math.max(screenWidth - 32, duration * TIMELINE_SCALE), height: 135, position: 'relative' }}>
+                    {/* Ruler track */}
+                    <View style={tl.ruler}>
+                      {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => {
+                        if (i % 5 !== 0) return null;
+                        return (
+                          <View key={i} style={[tl.tick, { left: i * TIMELINE_SCALE }]}>
+                            <View style={tl.tickLine} />
+                            <RNText style={tl.tickText}>{formatTime(i)}</RNText>
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    {/* Video Lane */}
+                    <View style={[tl.lane, tl.videoLane]}>
+                      <RNText style={tl.laneLabel}>Video</RNText>
+                      <View
+                        style={[
+                          tl.videoTrimmedBg,
+                          {
+                            left: (trimStart / 100) * duration * TIMELINE_SCALE,
+                            width: ((trimEnd - trimStart) / 100) * duration * TIMELINE_SCALE,
+                          },
+                        ]}
+                      />
+                    </View>
+
+                    {/* Text Overlays Lane */}
+                    <View style={tl.lane}>
+                      <RNText style={tl.laneLabel}>Texts</RNText>
+                      {overlays
+                        .filter(o => o.type === 'text')
+                        .map(o => {
+                          const isSelected = selectedOverlay === o.id;
+                          return (
+                            <TouchableOpacity
+                              key={o.id}
+                              style={[
+                                tl.block,
+                                tl.textBlock,
+                                {
+                                  left: o.startTime * TIMELINE_SCALE,
+                                  width: Math.max(30, (o.endTime - o.startTime) * TIMELINE_SCALE),
+                                },
+                                isSelected && tl.selectedBlock,
+                              ]}
+                              onPress={() => {
+                                setSelectedOverlay(o.id);
+                                videoRef.current?.seek(o.startTime);
+                                setCurrentTime(o.startTime);
+                              }}
+                            >
+                              <RNText numberOfLines={1} style={tl.blockText}>
+                                {o.text || 'Text'}
+                              </RNText>
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </View>
+
+                    {/* Image Overlays Lane */}
+                    <View style={tl.lane}>
+                      <RNText style={tl.laneLabel}>Images</RNText>
+                      {overlays
+                        .filter(o => o.type === 'image')
+                        .map(o => {
+                          const isSelected = selectedOverlay === o.id;
+                          return (
+                            <TouchableOpacity
+                              key={o.id}
+                              style={[
+                                tl.block,
+                                tl.imageBlock,
+                                {
+                                  left: o.startTime * TIMELINE_SCALE,
+                                  width: Math.max(30, (o.endTime - o.startTime) * TIMELINE_SCALE),
+                                },
+                                isSelected && tl.selectedBlock,
+                              ]}
+                              onPress={() => {
+                                setSelectedOverlay(o.id);
+                                videoRef.current?.seek(o.startTime);
+                                setCurrentTime(o.startTime);
+                              }}
+                            >
+                              <RNText numberOfLines={1} style={tl.blockText}>
+                                Image
+                              </RNText>
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </View>
+
+                    {/* Audio/Music Lane */}
+                    <View style={tl.lane}>
+                      <RNText style={tl.laneLabel}>Audio</RNText>
+                      {musicTracks.map(track => {
+                        const isSelected = selectedMusicTrack === track.id;
+                        return (
+                          <TouchableOpacity
+                            key={track.id}
+                            style={[
+                              tl.block,
+                              tl.audioBlock,
+                              {
+                                left: track.startTime * TIMELINE_SCALE,
+                                width: Math.max(30, (track.endTime - track.startTime) * TIMELINE_SCALE),
+                              },
+                              isSelected && tl.selectedBlock,
+                            ]}
+                            onPress={() => {
+                              setSelectedMusicTrack(track.id);
+                              videoRef.current?.seek(track.startTime);
+                              setCurrentTime(track.startTime);
+                            }}
+                          >
+                            <RNText numberOfLines={1} style={tl.blockText}>
+                              🎵 {track.name} ({(track.volume * 100).toFixed(0)}%)
+                            </RNText>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </ScrollView>
+              </View>
+            )}
 
             {/* Controls row */}
             <View style={styles.ctrlRow}>
@@ -1917,6 +2091,105 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         )}
 
       </KeyboardAvoidingView>
+
+      {/* ── Slideshow Generator Modal ── */}
+      <Modal visible={slideshowModalVisible} animationType="slide" transparent onRequestClose={() => { if (!generatingSlideshow) setSlideshowModalVisible(false); }}>
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { height: '80%', display: 'flex', flexDirection: 'column' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Title style={styles.modalTitle}>Create Video from Images</Title>
+              <TouchableOpacity disabled={generatingSlideshow} onPress={() => setSlideshowModalVisible(false)} style={{ padding: 4 }}>
+                <Icon.Close size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity disabled={generatingSlideshow} style={[styles.srcBtn, { backgroundColor: '#10B981', marginVertical: 10 }]} onPress={pickSlideshowImages}>
+                <Icon.Image size={18} color="#fff" />
+                <Text style={styles.srcBtnLabel}>+ Add Images</Text>
+              </TouchableOpacity>
+
+              {slideshowImages.length === 0 ? (
+                <View style={{ alignItems: 'center', marginVertical: 40 }}>
+                  <Text style={{ color: '#64748B', fontSize: 14 }}>No images added yet.</Text>
+                </View>
+              ) : (
+                slideshowImages.map((img, index) => (
+                  <View key={img.id} style={{ backgroundColor: '#1E293B', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#334155' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <RNImage source={{ uri: img.uri }} style={{ width: 60, height: 60, borderRadius: 6, backgroundColor: '#000' }} resizeMode="cover" />
+                      
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={{ color: '#F8FAFC', fontSize: 13, fontWeight: '700', marginBottom: 4 }}>Image #{index + 1}</Text>
+                        
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={{ color: '#94A3B8', fontSize: 12, marginRight: 8 }}>Duration:</Text>
+                          <TouchableOpacity disabled={generatingSlideshow} style={{ padding: 4, backgroundColor: '#0F172A', borderRadius: 4 }} onPress={() => {
+                            setSlideshowImages(prev => prev.map(item => item.id === img.id ? { ...item, duration: Math.max(0.5, item.duration - 0.5) } : item));
+                          }}>
+                            <Text style={{ color: '#F8FAFC', fontWeight: 'bold', fontSize: 12 }}> - </Text>
+                          </TouchableOpacity>
+                          <Text style={{ color: '#F8FAFC', fontSize: 12, marginHorizontal: 8, fontWeight: '700' }}>{img.duration}s</Text>
+                          <TouchableOpacity disabled={generatingSlideshow} style={{ padding: 4, backgroundColor: '#0F172A', borderRadius: 4 }} onPress={() => {
+                            setSlideshowImages(prev => prev.map(item => item.id === img.id ? { ...item, duration: item.duration + 0.5 } : item));
+                          }}>
+                            <Text style={{ color: '#F8FAFC', fontWeight: 'bold', fontSize: 12 }}> + </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity disabled={generatingSlideshow} style={{ padding: 6 }} onPress={() => {
+                        setSlideshowImages(prev => prev.filter(item => item.id !== img.id));
+                      }}>
+                        <Icon.Trash size={18} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={{ color: '#94A3B8', fontSize: 11, marginBottom: 4 }}>Animation / Effect:</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                        {['fade', 'zoom_in', 'zoom_out', 'spin', 'rotate_swing', 'pan_right', 'pan_left', 'none'].map((effectName) => {
+                          const active = img.effect === effectName;
+                          return (
+                            <TouchableOpacity
+                              key={effectName}
+                              disabled={generatingSlideshow}
+                              style={{
+                                paddingHorizontal: 10,
+                                paddingVertical: 4,
+                                borderRadius: 12,
+                                backgroundColor: active ? '#df103f' : '#0F172A',
+                                borderWidth: 1,
+                                borderColor: active ? '#df103f' : '#334155',
+                              }}
+                              onPress={() => {
+                                setSlideshowImages(prev => prev.map(item => item.id === img.id ? { ...item, effect: effectName } : item));
+                              }}
+                            >
+                              <Text style={{ color: active ? '#fff' : '#94A3B8', fontSize: 11, fontWeight: '600' }}>
+                                {effectName.replace('_', ' ')}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <View style={[styles.modalActions, { marginTop: 12, borderTopWidth: 1, borderColor: '#1E293B', paddingTop: 12 }]}>
+              <Button mode="outlined" textColor="#94A3B8" style={{ borderColor: '#334155' }} disabled={generatingSlideshow} onPress={() => { setSlideshowImages([]); setSlideshowModalVisible(false); }}>
+                Cancel
+              </Button>
+              <Button mode="contained" buttonColor="#df103f" disabled={generatingSlideshow || slideshowImages.length === 0} loading={generatingSlideshow} onPress={generateSlideshowVideo}>
+                {generatingSlideshow ? 'Generating...' : 'Generate Video'}
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Social Subcategory Modal (opens when route param category === 'Social Media') ── */}
       <Modal visible={showSocialModal} animationType="slide" transparent onRequestClose={() => setShowSocialModal(false)}>

@@ -11,10 +11,10 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
-  Share,
   Modal,
   PermissionsAndroid,
 } from 'react-native';
+import Share from 'react-native-share';
 import { Title, Button, TextInput, Text } from 'react-native-paper';
 import Svg, {
   Defs,
@@ -56,6 +56,12 @@ const PRESET_COLORS = [
 const CloseIcon = ({ size = 20, color = '#334155' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <Path d="M18 6L6 18M6 6l12 12" />
+  </Svg>
+);
+
+const ArrowLeftIcon = ({ size = 20, color = '#334155' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M19 12H5M12 19l-7-7 7-7" />
   </Svg>
 );
 
@@ -174,6 +180,7 @@ interface HistoryState {
   flipH: boolean;
   flipV: boolean;
   aspectRatio: number | 'free';
+  cropRect: { x: number; y: number; width: number; height: number };
   strokes: string[];
   overlays: OverlayItem[];
 }
@@ -191,25 +198,35 @@ interface CustomSliderProps {
 
 function CustomSlider({ value, min, max, step = 1, onChange, label, suffix = '' }: CustomSliderProps) {
   const sliderWidth = screenWidth - 100;
+  const startX = useRef(0);
+  const startValRef = useRef(0);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => handleTouch(e.nativeEvent.locationX),
-      onPanResponderMove: (e) => handleTouch(e.nativeEvent.locationX),
+      onPanResponderGrant: (e, gestureState) => {
+        const initialLocationX = e.nativeEvent.locationX;
+        let ratio = initialLocationX / sliderWidth;
+        ratio = Math.max(0, Math.min(1, ratio));
+        const startVal = min + ratio * (max - min);
+        let steppedVal = Math.round(startVal / step) * step;
+        steppedVal = Math.max(min, Math.min(max, steppedVal));
+
+        startX.current = e.nativeEvent.pageX;
+        startValRef.current = steppedVal;
+        onChange(steppedVal);
+      },
+      onPanResponderMove: (e, gestureState) => {
+        const deltaX = gestureState.dx;
+        const deltaValue = (deltaX / sliderWidth) * (max - min);
+        let newValue = startValRef.current + deltaValue;
+        let steppedVal = Math.round(newValue / step) * step;
+        steppedVal = Math.max(min, Math.min(max, steppedVal));
+        onChange(steppedVal);
+      },
     })
   ).current;
-
-  const handleTouch = (locationX: number) => {
-    let ratio = locationX / sliderWidth;
-    if (ratio < 0) ratio = 0;
-    if (ratio > 1) ratio = 1;
-    const rawVal = min + ratio * (max - min);
-    let steppedVal = Math.round(rawVal / step) * step;
-    if (steppedVal < min) steppedVal = min;
-    if (steppedVal > max) steppedVal = max;
-    onChange(steppedVal);
-  };
 
   const percentage = ((value - min) / (max - min)) * 100;
 
@@ -221,8 +238,8 @@ function CustomSlider({ value, min, max, step = 1, onChange, label, suffix = '' 
       </View>
       <View style={[sliderStyles.trackContainer, { width: sliderWidth }]} {...panResponder.panHandlers}>
         <View style={sliderStyles.track} />
-        <View style={[sliderStyles.activeTrack, { width: `${percentage}%` }]} />
-        <View style={[sliderStyles.thumb, { left: `${percentage}%`, transform: [{ translateX: -8 }] }]} />
+        <View style={[sliderStyles.activeTrack, { width: `${percentage}%` }]} pointerEvents="none" />
+        <View style={[sliderStyles.thumb, { left: `${percentage}%`, transform: [{ translateX: -8 }] }]} pointerEvents="none" />
       </View>
     </View>
   );
@@ -405,6 +422,8 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<number | 'free'>('free');
+  const [cropRect, setCropRect] = useState({ x: 0, y: 0, width: 400, height: 400 });
+  const [pendingCrop, setPendingCrop] = useState({ x: 0, y: 0, width: 400, height: 400 });
 
   // Doodling States
   const [drawingMode, setDrawingMode] = useState(false);
@@ -444,6 +463,7 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       flipH: currentState?.flipH ?? flipH,
       flipV: currentState?.flipV ?? flipV,
       aspectRatio: currentState?.aspectRatio ?? aspectRatio,
+      cropRect: currentState?.cropRect ?? cropRect,
       strokes: currentState?.strokes ?? strokes,
       overlays: currentState?.overlays ?? overlays,
     };
@@ -467,6 +487,8 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       setFlipH(state.flipH);
       setFlipV(state.flipV);
       setAspectRatio(state.aspectRatio);
+      setCropRect(state.cropRect ?? { x: 0, y: 0, width: 400, height: 400 });
+      setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
       setStrokes(state.strokes);
       setOverlays(state.overlays);
       setHistoryIndex(prevIndex);
@@ -482,6 +504,8 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       setFlipH(false);
       setFlipV(false);
       setAspectRatio('free');
+      setCropRect({ x: 0, y: 0, width: 400, height: 400 });
+      setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
       setStrokes([]);
       setOverlays([]);
       setHistoryIndex(-1);
@@ -502,6 +526,8 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       setFlipH(state.flipH);
       setFlipV(state.flipV);
       setAspectRatio(state.aspectRatio);
+      setCropRect(state.cropRect ?? { x: 0, y: 0, width: 400, height: 400 });
+      setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
       setStrokes(state.strokes);
       setOverlays(state.overlays);
       setHistoryIndex(nextIndex);
@@ -581,6 +607,8 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
     setFlipH(false);
     setFlipV(false);
     setAspectRatio('free');
+    setCropRect({ x: 0, y: 0, width: 400, height: 400 });
+    setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
     setStrokes([]);
     setOverlays([]);
     setHistory([]);
@@ -774,15 +802,284 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
 
   // --- Crop Aspect Ratios ---
   const cropBoxDimensions = useMemo(() => {
-    if (aspectRatio === 'free') {
-      return { width: CANVAS_SIZE, height: CANVAS_SIZE };
+    let activeRatio: number | 'free' = aspectRatio;
+    if (activeRatio === 'free') {
+      activeRatio = cropRect.width / cropRect.height;
     }
-    if (aspectRatio >= 1) {
-      return { width: CANVAS_SIZE, height: CANVAS_SIZE / aspectRatio };
+    if (activeRatio >= 1) {
+      return { width: CANVAS_SIZE, height: CANVAS_SIZE / activeRatio };
     } else {
-      return { width: CANVAS_SIZE * aspectRatio, height: CANVAS_SIZE };
+      return { width: CANVAS_SIZE * activeRatio, height: CANVAS_SIZE };
     }
-  }, [aspectRatio]);
+  }, [aspectRatio, cropRect]);
+
+  const cropStateRef = useRef({
+    pendingCrop,
+    cropBoxDimensions,
+    aspectRatio,
+    cropRect,
+  });
+  cropStateRef.current = {
+    pendingCrop,
+    cropBoxDimensions,
+    aspectRatio,
+    cropRect,
+  };
+
+  const startCrop = useRef({ x: 0, y: 0, width: 400, height: 400 });
+
+  const cropCenterPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startCrop.current = { ...cropStateRef.current.pendingCrop };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { width: W, height: H } = cropStateRef.current.cropBoxDimensions;
+        const deltaX = (gestureState.dx / W) * 400;
+        const deltaY = (gestureState.dy / H) * 400;
+        
+        const newX = Math.max(0, Math.min(400 - startCrop.current.width, startCrop.current.x + deltaX));
+        const newY = Math.max(0, Math.min(400 - startCrop.current.height, startCrop.current.y + deltaY));
+        
+        setPendingCrop({
+          x: Math.round(newX),
+          y: Math.round(newY),
+          width: startCrop.current.width,
+          height: startCrop.current.height,
+        });
+      },
+    })
+  ).current;
+
+  const cropTLPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startCrop.current = { ...cropStateRef.current.pendingCrop };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { width: W, height: H } = cropStateRef.current.cropBoxDimensions;
+        const ratio = cropStateRef.current.aspectRatio;
+        const deltaX = (gestureState.dx / W) * 400;
+        const deltaY = (gestureState.dy / H) * 400;
+
+        if (ratio === 'free') {
+          const newX = Math.max(0, Math.min(startCrop.current.x + startCrop.current.width - 40, startCrop.current.x + deltaX));
+          const newY = Math.max(0, Math.min(startCrop.current.y + startCrop.current.height - 40, startCrop.current.y + deltaY));
+          setPendingCrop({
+            x: Math.round(newX),
+            y: Math.round(newY),
+            width: Math.round(startCrop.current.x + startCrop.current.width - newX),
+            height: Math.round(startCrop.current.y + startCrop.current.height - newY),
+          });
+        } else {
+          let maxWidth = startCrop.current.x + startCrop.current.width;
+          let maxHeight = startCrop.current.y + startCrop.current.height;
+          maxWidth = Math.min(maxWidth, maxHeight * (ratio as number));
+          
+          const newWidth = Math.max(40, Math.min(maxWidth, startCrop.current.width - deltaX));
+          const newHeight = newWidth / (ratio as number);
+          const newX = startCrop.current.x + startCrop.current.width - newWidth;
+          const newY = startCrop.current.y + startCrop.current.height - newHeight;
+          setPendingCrop({
+            x: Math.round(newX),
+            y: Math.round(newY),
+            width: Math.round(newWidth),
+            height: Math.round(newHeight),
+          });
+        }
+      },
+    })
+  ).current;
+
+  const cropTRPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startCrop.current = { ...cropStateRef.current.pendingCrop };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { width: W, height: H } = cropStateRef.current.cropBoxDimensions;
+        const ratio = cropStateRef.current.aspectRatio;
+        const deltaX = (gestureState.dx / W) * 400;
+        const deltaY = (gestureState.dy / H) * 400;
+
+        if (ratio === 'free') {
+          const newY = Math.max(0, Math.min(startCrop.current.y + startCrop.current.height - 40, startCrop.current.y + deltaY));
+          const newWidth = Math.min(400 - startCrop.current.x, Math.max(40, startCrop.current.width + deltaX));
+          setPendingCrop({
+            x: startCrop.current.x,
+            y: Math.round(newY),
+            width: Math.round(newWidth),
+            height: Math.round(startCrop.current.y + startCrop.current.height - newY),
+          });
+        } else {
+          let maxWidth = 400 - startCrop.current.x;
+          let maxHeight = startCrop.current.y + startCrop.current.height;
+          maxWidth = Math.min(maxWidth, maxHeight * (ratio as number));
+          
+          const newWidth = Math.max(40, Math.min(maxWidth, startCrop.current.width + deltaX));
+          const newHeight = newWidth / (ratio as number);
+          const newY = startCrop.current.y + startCrop.current.height - newHeight;
+          setPendingCrop({
+            x: startCrop.current.x,
+            y: Math.round(newY),
+            width: Math.round(newWidth),
+            height: Math.round(newHeight),
+          });
+        }
+      },
+    })
+  ).current;
+
+  const cropBLPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startCrop.current = { ...cropStateRef.current.pendingCrop };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { width: W, height: H } = cropStateRef.current.cropBoxDimensions;
+        const ratio = cropStateRef.current.aspectRatio;
+        const deltaX = (gestureState.dx / W) * 400;
+        const deltaY = (gestureState.dy / H) * 400;
+
+        if (ratio === 'free') {
+          const newX = Math.max(0, Math.min(startCrop.current.x + startCrop.current.width - 40, startCrop.current.x + deltaX));
+          const newHeight = Math.min(400 - startCrop.current.y, Math.max(40, startCrop.current.height + deltaY));
+          setPendingCrop({
+            x: Math.round(newX),
+            y: startCrop.current.y,
+            width: Math.round(startCrop.current.x + startCrop.current.width - newX),
+            height: Math.round(newHeight),
+          });
+        } else {
+          let maxWidth = startCrop.current.x + startCrop.current.width;
+          let maxHeight = 400 - startCrop.current.y;
+          maxWidth = Math.min(maxWidth, maxHeight * (ratio as number));
+          
+          const newWidth = Math.max(40, Math.min(maxWidth, startCrop.current.width - deltaX));
+          const newHeight = newWidth / (ratio as number);
+          const newX = startCrop.current.x + startCrop.current.width - newWidth;
+          setPendingCrop({
+            x: Math.round(newX),
+            y: startCrop.current.y,
+            width: Math.round(newWidth),
+            height: Math.round(newHeight),
+          });
+        }
+      },
+    })
+  ).current;
+
+  const cropBRPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startCrop.current = { ...cropStateRef.current.pendingCrop };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { width: W, height: H } = cropStateRef.current.cropBoxDimensions;
+        const ratio = cropStateRef.current.aspectRatio;
+        const deltaX = (gestureState.dx / W) * 400;
+        const deltaY = (gestureState.dy / H) * 400;
+
+        if (ratio === 'free') {
+          const newWidth = Math.min(400 - startCrop.current.x, Math.max(40, startCrop.current.width + deltaX));
+          const newHeight = Math.min(400 - startCrop.current.y, Math.max(40, startCrop.current.height + deltaY));
+          setPendingCrop({
+            x: startCrop.current.x,
+            y: startCrop.current.y,
+            width: Math.round(newWidth),
+            height: Math.round(newHeight),
+          });
+        } else {
+          let maxWidth = 400 - startCrop.current.x;
+          let maxHeight = 400 - startCrop.current.y;
+          maxWidth = Math.min(maxWidth, maxHeight * (ratio as number));
+          
+          const newWidth = Math.max(40, Math.min(maxWidth, startCrop.current.width + deltaX));
+          const newHeight = newWidth / (ratio as number);
+          setPendingCrop({
+            x: startCrop.current.x,
+            y: startCrop.current.y,
+            width: Math.round(newWidth),
+            height: Math.round(newHeight),
+          });
+        }
+      },
+    })
+  ).current;
+
+  const applyCrop = () => {
+    const C = cropStateRef.current.cropRect;
+    const P = cropStateRef.current.pendingCrop;
+
+    const newX = C.x + (P.x / 400) * C.width;
+    const newY = C.y + (P.y / 400) * C.height;
+    const newWidth = (P.width / 400) * C.width;
+    const newHeight = (P.height / 400) * C.height;
+
+    const newCrop = {
+      x: Math.max(0, Math.min(400, newX)),
+      y: Math.max(0, Math.min(400, newY)),
+      width: Math.max(40, Math.min(400, newWidth)),
+      height: Math.max(40, Math.min(400, newHeight)),
+    };
+
+    setCropRect(newCrop);
+    setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
+
+    commitHistory({
+      cropRect: newCrop,
+      aspectRatio: aspectRatio === 'free' ? newCrop.width / newCrop.height : aspectRatio,
+    });
+
+    Alert.alert('Cropped', 'Crop applied successfully.');
+  };
+
+  const resetCrop = () => {
+    const defaultCrop = { x: 0, y: 0, width: 400, height: 400 };
+    setCropRect(defaultCrop);
+    setPendingCrop(defaultCrop);
+    setAspectRatio('free');
+    commitHistory({
+      cropRect: defaultCrop,
+      aspectRatio: 'free',
+    });
+  };
+
+  const handleRatioSelect = (value: number | 'free') => {
+    setAspectRatio(value);
+    if (value === 'free') {
+      setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
+      commitHistory({ aspectRatio: 'free' });
+    } else {
+      let w = 400;
+      let h = 400;
+      if (value >= 1) {
+        h = 400 / value;
+      } else {
+        w = 400 * value;
+      }
+      const x = (400 - w) / 2;
+      const y = (400 - h) / 2;
+      const newPending = {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(w),
+        height: Math.round(h),
+      };
+      setPendingCrop(newPending);
+      commitHistory({ aspectRatio: value });
+    }
+  };
 
   // --- Doodling Handlers ---
   const drawingPanResponder = useRef(
@@ -792,16 +1089,17 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       onPanResponderGrant: (e) => {
         if (!drawingMode) return;
         const { locationX, locationY } = e.nativeEvent;
-        // Scale to 400x400 SVG viewbox
-        const x = (locationX / cropBoxDimensions.width) * 400;
-        const y = (locationY / cropBoxDimensions.height) * 400;
+        const { cropRect: activeCrop, cropBoxDimensions: activeDimensions } = cropStateRef.current;
+        const x = activeCrop.x + (locationX / activeDimensions.width) * activeCrop.width;
+        const y = activeCrop.y + (locationY / activeDimensions.height) * activeCrop.height;
         setCurrentStroke(`M ${x.toFixed(1)} ${y.toFixed(1)}`);
       },
       onPanResponderMove: (e) => {
         if (!drawingMode) return;
         const { locationX, locationY } = e.nativeEvent;
-        const x = (locationX / cropBoxDimensions.width) * 400;
-        const y = (locationY / cropBoxDimensions.height) * 400;
+        const { cropRect: activeCrop, cropBoxDimensions: activeDimensions } = cropStateRef.current;
+        const x = activeCrop.x + (locationX / activeDimensions.width) * activeCrop.width;
+        const y = activeCrop.y + (locationY / activeDimensions.height) * activeCrop.height;
         setCurrentStroke((prev) => `${prev} L ${x.toFixed(1)} ${y.toFixed(1)}`);
       },
       onPanResponderRelease: () => {
@@ -939,9 +1237,15 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       console.warn('saveImageToDevice failed', err);
       // fallback to share
       try {
-        await Share.share(Platform.OS === 'ios' ? { url: localUri } : { message: 'Check out my edited photo', url: localUri });
-      } catch (e) {
-        Alert.alert('Save failed', 'Could not save or share the image.');
+        await Share.open({
+          url: localUri,
+          type: 'image/jpeg',
+        });
+      } catch (e: any) {
+        const isCancel = e?.message?.toLowerCase().includes('cancel') || e?.toString().toLowerCase().includes('cancel');
+        if (!isCancel) {
+          Alert.alert('Save failed', 'Could not save or share the image.');
+        }
       }
       return false;
     }
@@ -963,10 +1267,16 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
         }
       }
 
-      await Share.share(Platform.OS === 'ios' ? { url: shareUrl } : { message: 'Check out my edited photo', url: shareUrl });
-    } catch (err) {
+      await Share.open({
+        url: shareUrl,
+        type: 'image/jpeg',
+      });
+    } catch (err: any) {
       console.warn('shareImageFile failed', err);
-      Alert.alert('Share Failed', 'Failed to share the image.');
+      const isCancel = err?.message?.toLowerCase().includes('cancel') || err?.toString().toLowerCase().includes('cancel');
+      if (!isCancel) {
+        Alert.alert('Share Failed', 'Failed to share the image.');
+      }
     }
   };
 
@@ -1002,13 +1312,22 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
     }, 100);
   };
 
+  const W = cropBoxDimensions.width;
+  const H = cropBoxDimensions.height;
+  const cropLeft = (pendingCrop.x / 400) * W;
+  const cropTop = (pendingCrop.y / 400) * H;
+  const cropWidth = (pendingCrop.width / 400) * W;
+  const cropHeight = (pendingCrop.height / 400) * H;
+  const cropBottom = cropTop + cropHeight;
+  const cropRight = cropLeft + cropWidth;
+
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
         {/* Header Bar */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerBtn}>
-            <CloseIcon size={20} color="#F8FAFC" />
+            <ArrowLeftIcon size={20} color="#F8FAFC" />
           </TouchableOpacity>
           <Title style={styles.headerTitle}>Photo Editor</Title>
           <View style={styles.headerRight}>
@@ -1069,7 +1388,8 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                 <Svg
                   width="100%"
                   height="100%"
-                  viewBox="0 0 400 400"
+                  viewBox={`${cropRect.x} ${cropRect.y} ${cropRect.width} ${cropRect.height}`}
+                  preserveAspectRatio="none"
                   pointerEvents="none"
                 >
                   <Defs>
@@ -1233,6 +1553,41 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                   />
                 ))}
               </View>
+
+              {/* Crop Box Overlay (only visible in transform mode) */}
+              {activeTab === 'transform' && (
+                <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+                  {/* Dimmed surrounding crop masks */}
+                  <View style={[styles.cropMask, { left: 0, top: 0, right: 0, height: cropTop }]} />
+                  <View style={[styles.cropMask, { left: 0, bottom: 0, right: 0, top: cropBottom }]} />
+                  <View style={[styles.cropMask, { left: 0, top: cropTop, width: cropLeft, height: cropHeight }]} />
+                  <View style={[styles.cropMask, { right: 0, top: cropTop, left: cropRight, height: cropHeight }]} />
+
+                  {/* Crop Box Frame */}
+                  <View
+                    style={[
+                      styles.cropBoxFrame,
+                      {
+                        left: cropLeft,
+                        top: cropTop,
+                        width: cropWidth,
+                        height: cropHeight,
+                      },
+                    ]}
+                    {...cropCenterPanResponder.panHandlers}
+                  >
+                    {/* Grid lines for professional rule-of-thirds look */}
+                    <View style={styles.cropGridRow} pointerEvents="none" />
+                    <View style={styles.cropGridCol} pointerEvents="none" />
+
+                    {/* Corner Handles */}
+                    <View style={[styles.cropHandle, styles.handleTL]} {...cropTLPanResponder.panHandlers} />
+                    <View style={[styles.cropHandle, styles.handleTR]} {...cropTRPanResponder.panHandlers} />
+                    <View style={[styles.cropHandle, styles.handleBL]} {...cropBLPanResponder.panHandlers} />
+                    <View style={[styles.cropHandle, styles.handleBR]} {...cropBRPanResponder.panHandlers} />
+                  </View>
+                </View>
+              )}
             </ViewShot>
           ) : (
             /* Choose Photo Placeholder Screen */
@@ -1466,10 +1821,7 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                           styles.ratioBtn,
                           aspectRatio === ratio.value && styles.ratioBtnActive,
                         ]}
-                        onPress={() => {
-                          setAspectRatio(ratio.value as any);
-                          commitHistory({ aspectRatio: ratio.value as any });
-                        }}
+                        onPress={() => handleRatioSelect(ratio.value as any)}
                       >
                         <Text style={[styles.ratioBtnLabel, aspectRatio === ratio.value && styles.ratioBtnLabelActive]}>
                           {ratio.label}
@@ -1477,6 +1829,27 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+                    <Button
+                      mode="contained"
+                      buttonColor="#10B981"
+                      textColor="#ffffff"
+                      icon={() => <CheckIcon size={16} color="#fff" />}
+                      style={{ flex: 1, marginRight: 6 }}
+                      onPress={applyCrop}
+                    >
+                      Apply Crop
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      textColor="#F8FAFC"
+                      style={{ flex: 1, marginLeft: 6, borderColor: '#475569' }}
+                      onPress={resetCrop}
+                    >
+                      Reset Crop
+                    </Button>
+                  </View>
                 </View>
               )}
 
@@ -1944,4 +2317,70 @@ const styles = StyleSheet.create({
   modalTextInput: { width: '100%', marginBottom: 16 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end' },
   modalBtn: { marginLeft: 8 },
+
+  // Crop overlay styles
+  cropMask: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  cropBoxFrame: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    borderStyle: 'dashed',
+  },
+  cropGridRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '33.33%',
+    height: '33.33%',
+    borderTopWidth: 0.5,
+    borderBottomWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  cropGridCol: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '33.33%',
+    width: '33.33%',
+    borderLeftWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  cropHandle: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    backgroundColor: 'transparent',
+  },
+  handleTL: {
+    top: -5,
+    left: -5,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: '#ffffff',
+  },
+  handleTR: {
+    top: -5,
+    right: -5,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderColor: '#ffffff',
+  },
+  handleBL: {
+    bottom: -5,
+    left: -5,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: '#ffffff',
+  },
+  handleBR: {
+    bottom: -5,
+    right: -5,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderColor: '#ffffff',
+  },
 });

@@ -8,11 +8,11 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
-  Share,
   TextInput,
   Image as RNImage,
   PanResponder,
 } from 'react-native';
+import Share from 'react-native-share';
 import { Title, Text } from 'react-native-paper';
 import Svg, { Path, Circle } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
@@ -45,6 +45,12 @@ const PRESET_LOGOS: Record<string, { name: string; url: string }> = {
 const CloseIcon = ({ size = 20, color = '#F8FAFC' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <Path d="M18 6L6 18M6 6l12 12" />
+  </Svg>
+);
+
+const ArrowLeftIcon = ({ size = 20, color = '#F8FAFC' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M19 12H5M12 19l-7-7 7-7" />
   </Svg>
 );
 
@@ -377,7 +383,15 @@ export default function QRCodeGenerator({ navigation }: { route?: any; navigatio
               await RNFS.writeFile(destPath, data, 'utf8');
             }
             // On iOS present share sheet so user can Save to Files or save image
-            await Share.share({ url: `file://${destPath}` }, { subject: 'QR Code from Flarelap' });
+            try {
+              await Share.open({
+                url: `file://${destPath}`,
+                type: 'image/png',
+              });
+            } catch (e: any) {
+              const isCancel = e?.message?.toLowerCase().includes('cancel') || e?.toString().toLowerCase().includes('cancel');
+              if (!isCancel) throw e;
+            }
             Alert.alert('Saved', 'Image written to app documents. Use the share sheet to move it to Files or Photos.');
             return;
           }
@@ -399,17 +413,30 @@ export default function QRCodeGenerator({ navigation }: { route?: any; navigatio
           const destPath = `${RNFS.DocumentDirectoryPath}/${filename}`;
           await RNFS.copyFile(srcPath, destPath);
           // Present share so user can export to Files or Photos
-          await Share.share({ url: `file://${destPath}` }, { subject: 'QR Code from Flarelap' });
+          try {
+            await Share.open({
+              url: `file://${destPath}`,
+              type: 'image/png',
+            });
+          } catch (e: any) {
+            const isCancel = e?.message?.toLowerCase().includes('cancel') || e?.toString().toLowerCase().includes('cancel');
+            if (!isCancel) throw e;
+          }
           Alert.alert('Saved', 'Image written to app documents. Use the share sheet to move it to Files or Photos.');
           return;
         }
       }
 
       // If RNFS is not present, fallback to share sheet so user can Save Image / Save to Files
-      if (Platform.OS === 'ios') {
-        await Share.share({ url: localUri }, { subject: 'QR Code from Flarelap' });
-      } else {
-        await Share.share({ message: 'Scan my QR code made in Flarelap!', url: localUri });
+      try {
+        await Share.open({
+          url: localUri,
+          type: 'image/png',
+          message: 'Scan my QR code made in Flarelap!',
+        });
+      } catch (e: any) {
+        const isCancel = e?.message?.toLowerCase().includes('cancel') || e?.toString().toLowerCase().includes('cancel');
+        if (!isCancel) throw e;
       }
 
       Alert.alert('Share opened', 'Use the share sheet to save the image (e.g. "Save Image" or "Save to Files").');
@@ -465,14 +492,17 @@ export default function QRCodeGenerator({ navigation }: { route?: any; navigatio
         shareUri = stripFilePrefix(localUri);
       }
 
-      if (Platform.OS === 'ios') {
-        await Share.share({ url: shareUri }, { subject: 'QR Code from Flarelap' });
-      } else {
-        await Share.share({ message: 'Scan my QR code made in Flarelap!', url: shareUri });
-      }
-    } catch (err) {
+      await Share.open({
+        url: shareUri,
+        type: 'image/png',
+        message: 'Scan my QR code made in Flarelap!',
+      });
+    } catch (err: any) {
       console.warn('shareImageFile failed', err);
-      Alert.alert('Share Failed', 'Could not share the QR image file.');
+      const isCancel = err?.message?.toLowerCase().includes('cancel') || err?.toString().toLowerCase().includes('cancel');
+      if (!isCancel) {
+        Alert.alert('Share Failed', 'Could not share the QR image file.');
+      }
     }
   };
 
@@ -482,7 +512,7 @@ export default function QRCodeGenerator({ navigation }: { route?: any; navigatio
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerBtn}>
-            <CloseIcon size={20} color="#F8FAFC" />
+            <ArrowLeftIcon size={20} color="#F8FAFC" />
           </TouchableOpacity>
           <Title style={styles.headerTitle}>QR Code Generator</Title>
           <TouchableOpacity onPress={handleExportQRCode} style={styles.exportBtn}>

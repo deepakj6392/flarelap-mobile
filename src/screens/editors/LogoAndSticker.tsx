@@ -25,10 +25,10 @@ import {
   Dimensions,
   ActivityIndicator,
   Modal,
-  Share,
   TextInput as RNTextInput,
   Platform,
 } from 'react-native';
+import Share from 'react-native-share';
 import { Text, Title } from 'react-native-paper';
 import Svg, {
   Path, Circle, Rect, Polygon, Defs, LinearGradient, Stop, G,
@@ -37,6 +37,7 @@ import Svg, {
 import { launchImageLibrary } from 'react-native-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ArrowLeftIcon } from '../../components/icons-svg';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -642,9 +643,15 @@ export default function LogoAndSticker({ navigation, route }: { navigation?: any
     } catch (err) {
       console.warn('saveImageToDevice failed', err);
       try {
-        await Share.share(Platform.OS === 'ios' ? { url: localUri } : { message: 'Logo/Sticker made with Flarelap', url: localUri });
-      } catch {
-        Alert.alert('Save failed', 'Could not save or share the image.');
+        await Share.open({
+          url: localUri,
+          type: 'image/png',
+        });
+      } catch (e: any) {
+        const isCancel = e?.message?.toLowerCase().includes('cancel') || e?.toString().toLowerCase().includes('cancel');
+        if (!isCancel) {
+          Alert.alert('Save failed', 'Could not save or share the image.');
+        }
       }
       return false;
     }
@@ -662,10 +669,16 @@ export default function LogoAndSticker({ navigation, route }: { navigation?: any
         shareUrl = `file://${filePath}`;
       }
 
-      await Share.share(Platform.OS === 'ios' ? { url: shareUrl } : { message: 'Logo/Sticker made with Flarelap', url: shareUrl });
-    } catch (err) {
+      await Share.open({
+        url: shareUrl,
+        type: 'image/png',
+      });
+    } catch (err: any) {
       console.warn('shareImageFile failed', err);
-      Alert.alert('Share Failed', 'Failed to share the image.');
+      const isCancel = err?.message?.toLowerCase().includes('cancel') || err?.toString().toLowerCase().includes('cancel');
+      if (!isCancel) {
+        Alert.alert('Share Failed', 'Failed to share the image.');
+      }
     }
   };
 
@@ -719,7 +732,7 @@ export default function LogoAndSticker({ navigation, route }: { navigation?: any
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.hBtn}>
-          <RNText style={styles.hBtnTxt}>✕</RNText>
+          <ArrowLeftIcon size={20} color="#F8FAFC" />
         </TouchableOpacity>
         <Title style={styles.hTitle}>Logo & Sticker</Title>
         <View style={styles.hRight}>

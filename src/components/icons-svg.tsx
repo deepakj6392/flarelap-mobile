@@ -105,4 +105,10 @@ const ItalicIcon = ({ size = 18, color = '#334155' }) => (
     </Svg>
 );
 
-export { UndoIcon, RedoIcon, PlusIcon, TextIcon, ShapeIcon, ImageIcon, LayersIcon, CanvasIcon, TemplateIcon, ChevronUpIcon, ChevronDownIcon, CloseIcon, DownloadIcon, RotateIcon, TrashIcon, BoldIcon, ItalicIcon };
+const ArrowLeftIcon = ({ size = 20, color = '#334155' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M19 12H5M12 19l-7-7 7-7" />
+    </Svg>
+);
+
+export { UndoIcon, RedoIcon, PlusIcon, TextIcon, ShapeIcon, ImageIcon, LayersIcon, CanvasIcon, TemplateIcon, ChevronUpIcon, ChevronDownIcon, CloseIcon, DownloadIcon, RotateIcon, TrashIcon, BoldIcon, ItalicIcon, ArrowLeftIcon };
