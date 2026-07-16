@@ -220,7 +220,7 @@ export default function StudentRegisterScreen() {
               key: RAZORPAY_KEY_ID || orderRes.key_id,
               amount: orderRes.amount,
               currency: orderRes.currency || 'INR',
-              name: 'Flarelap Foundation',
+              name: 'Flarelap',
               description: `Enrollment fee for ${program.programName}`,
               order_id: orderRes.order_id,
               prefill: {

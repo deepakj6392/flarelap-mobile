@@ -3,6 +3,7 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import Logo from '../components/Logo';
 import { TextInput, Button, Title, Snackbar } from 'react-native-paper';
 import { confirmPasswordReset, requestPasswordReset } from '../services/auth.service';
+import { PasswordEyeIcon } from '../components/icons-svg';
 
 // Using API service functions instead of local endpoints
 
@@ -12,6 +13,7 @@ function ForgotPasswordScreen({ navigation }: any) {
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
 
@@ -89,8 +91,34 @@ function ForgotPasswordScreen({ navigation }: any) {
         ) : (
           <>
             <TextInput mode="outlined" label="Code" style={[styles.input, styles.roundInput]} value={code} onChangeText={setCode} />
-            <TextInput mode="outlined" label="New password" style={[styles.input, styles.roundInput]} value={password} onChangeText={setPassword} secureTextEntry />
-            <TextInput mode="outlined" label="Confirm password" style={[styles.input, styles.roundInput]} value={passwordConfirm} onChangeText={setPasswordConfirm} secureTextEntry />
+             <TextInput
+              mode="outlined"
+              label="New password"
+              style={[styles.input, styles.roundInput]}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              right={
+                <TextInput.Icon
+                  icon={props => <PasswordEyeIcon visible={showPassword} {...props} />}
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
+            />
+            <TextInput
+              mode="outlined"
+              label="Confirm password"
+              style={[styles.input, styles.roundInput]}
+              value={passwordConfirm}
+              onChangeText={setPasswordConfirm}
+              secureTextEntry={!showPassword}
+              right={
+                <TextInput.Icon
+                  icon={props => <PasswordEyeIcon visible={showPassword} {...props} />}
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
+            />
 
             <Button loading={loading} mode="contained" onPress={confirmReset} style={styles.button}>
               Reset password

@@ -46,9 +46,12 @@ const AppleIcon = ({ size = 20 }: { size?: number }) => (
   </Svg>
 );
 
-function LoginScreen({navigation}: any) {
+import { PasswordEyeIcon } from '../components/icons-svg';
+
+function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +74,7 @@ function LoginScreen({navigation}: any) {
         console.log(token)
         setAuthToken(token);
         // persist tokens (if backend returns refresh token)
-        try { await saveTokens({ accessToken: token, refreshToken: data.refresh_token }); } catch {};
+        try { await saveTokens({ accessToken: token, refreshToken: data.refresh_token }); } catch { };
       }
       // navigate into main app
       navigation.replace && navigation.replace('Main');
@@ -136,7 +139,7 @@ function LoginScreen({navigation}: any) {
           accessToken: token,
           refreshToken: `mock-refresh-token-${Date.now()}`,
         });
-      } catch {}
+      } catch { }
       Alert.alert('Success', `Logged in successfully with ${provider}!`);
       navigation.replace && navigation.replace('Main');
     } catch (err: any) {
@@ -174,7 +177,7 @@ function LoginScreen({navigation}: any) {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <TextInput
           mode="outlined"
-          label="Email"
+          label="Email" 
           style={[styles.input, styles.roundInput]}
           outlineStyle={styles.roundInput}
           dense
@@ -192,11 +195,17 @@ function LoginScreen({navigation}: any) {
           style={[styles.input, styles.roundInput]}
           outlineStyle={styles.roundInput}
           dense
-          secureTextEntry
+          secureTextEntry={!showPassword}
           value={password}
           onChangeText={setPassword}
           returnKeyType="done"
           onSubmitEditing={handleLogin}
+          right={
+            <TextInput.Icon
+              icon={props => <PasswordEyeIcon visible={showPassword} {...props} />}
+              onPress={() => setShowPassword(!showPassword)}
+            />
+          }
         />
 
         <Button mode="contained" onPress={handleLogin} style={styles.button} loading={loading} disabled={loading}>
@@ -228,13 +237,17 @@ function LoginScreen({navigation}: any) {
           >
             <FacebookIcon size={24} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.socialBtn}
-            onPress={() => handleSocialLogin('Apple')}
-            disabled={loading}
-          >
-            <AppleIcon size={24} />
-          </TouchableOpacity>
+          {
+            Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={styles.socialBtn}
+                onPress={() => handleSocialLogin('Apple')}
+                disabled={loading}
+              >
+                <AppleIcon size={24} />
+              </TouchableOpacity>
+            )
+          }
         </View>
 
         <View style={styles.row}>
@@ -249,7 +262,7 @@ function LoginScreen({navigation}: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor:"#FFFFFF" },
+  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: "#FFFFFF" },
   title: { fontSize: 28, marginBottom: 24, color: THEME_COLORS.primary },
   input: { marginBottom: 12 },
   roundInput: { borderRadius: 16 },

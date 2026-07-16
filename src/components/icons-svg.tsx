@@ -111,4 +111,27 @@ const ArrowLeftIcon = ({ size = 20, color = '#334155' }) => (
     </Svg>
 );
 
-export { UndoIcon, RedoIcon, PlusIcon, TextIcon, ShapeIcon, ImageIcon, LayersIcon, CanvasIcon, TemplateIcon, ChevronUpIcon, ChevronDownIcon, CloseIcon, DownloadIcon, RotateIcon, TrashIcon, BoldIcon, ItalicIcon, ArrowLeftIcon };
+const EyeIcon = ({ size = 22, color = '#64748b' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <Path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+    </Svg>
+);
+
+const EyeOffIcon = ({ size = 22, color = '#64748b' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a19.08 19.08 0 0 1 2.18-2.54" />
+        <Path d="M8.82 8.82a3 3 0 0 0 4.18 4.18" />
+        <Path d="M16.93 16.93A10.07 10.07 0 0 0 22 12s-3-7-10-7a10.79 10.79 0 0 0-4.18.82" />
+        <Path d="M1 1l22 22" />
+    </Svg>
+);
+
+const PasswordEyeIcon = ({ visible, size = 22, color = '#64748b' }: { visible: boolean; size?: number; color?: string }) => {
+    if (visible) {
+        return <EyeOffIcon size={size} color={color} />;
+    }
+    return <EyeIcon size={size} color={color} />;
+};
+
+export { UndoIcon, RedoIcon, PlusIcon, TextIcon, ShapeIcon, ImageIcon, LayersIcon, CanvasIcon, TemplateIcon, ChevronUpIcon, ChevronDownIcon, CloseIcon, DownloadIcon, RotateIcon, TrashIcon, BoldIcon, ItalicIcon, ArrowLeftIcon, EyeIcon, EyeOffIcon, PasswordEyeIcon };

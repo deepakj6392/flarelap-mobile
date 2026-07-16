@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Logo from '../../components/Logo';
 import { THEME_COLORS } from '../../constants';
 import { studentLogin, studentForgotPassword, studentResetPassword, saveStudentSession } from '../../services/student.service';
+import { PasswordEyeIcon } from '../../components/icons-svg';
 
 export default function StudentLoginScreen() {
   const navigation = useNavigation();
@@ -209,7 +210,7 @@ export default function StudentLoginScreen() {
                 onSubmitEditing={handleLoginSubmit}
                 right={
                   <TextInput.Icon
-                    icon={showPassword ? 'eye-off' : 'eye'}
+                    icon={props => <PasswordEyeIcon visible={showPassword} {...props} />}
                     onPress={() => setShowPassword(!showPassword)}
                   />
                 }
@@ -315,7 +316,7 @@ export default function StudentLoginScreen() {
                 onChangeText={setNewPassword}
                 right={
                   <TextInput.Icon
-                    icon={showNewPassword ? 'eye-off' : 'eye'}
+                    icon={props => <PasswordEyeIcon visible={showNewPassword} {...props} />}
                     onPress={() => setShowNewPassword(!showNewPassword)}
                   />
                 }
@@ -331,6 +332,12 @@ export default function StudentLoginScreen() {
                 secureTextEntry={!showNewPassword}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                right={
+                  <TextInput.Icon
+                    icon={props => <PasswordEyeIcon visible={showNewPassword} {...props} />}
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                  />
+                }
               />
 
               <Button
