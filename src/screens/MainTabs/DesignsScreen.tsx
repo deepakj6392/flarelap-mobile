@@ -17,10 +17,12 @@ function DesignCard({ item }: { item: any }) {
 
   const handlePress = () => {
     if (template.category === 'Video') {
-      navigation.navigate('VideoEditor', { videoUri: template.videoURL });
+      navigation.navigate('VideoEditor', { videoUri: template.videoURL || template.video_url });
     } else {
-      // Default to photo/image editor for other categories like Social Media / Photo Editor / Svg / logo etc.
-      navigation.navigate('PhotoEditor', { imageUri: template.thumbnail });
+      navigation.navigate('SvgEditor', {
+        svgUrl: template.svg_url,
+        category: template.category,
+      });
     }
   };
 

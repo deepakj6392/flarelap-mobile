@@ -35,6 +35,7 @@ import InstagramStoryIcon from '../../assets/icons/social/thumbnail_instagram_st
 import YouTubeIntroIcon from '../../assets/icons/social/thumbnail_youtube_intro.svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Template } from '../../../types/template';
+import { Camera, useCameraDevice, useVideoOutput, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 
 // ─── Dimensions ────────────────────────────────────────────────────────────────
 const { width: screenWidth } = Dimensions.get('window');
@@ -88,7 +89,33 @@ const SPEED_OPTIONS = [
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type OverlayType = 'text' | 'image';
+type OverlayType = 'text' | 'image' | 'emoji';
+
+const getTwemojiUrl = (emoji: string) => {
+  const codePoints = Array.from(emoji)
+    .map(char => char.codePointAt(0)!.toString(16))
+    .filter(cp => cp !== 'fe0f');
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/${codePoints.join('-')}.png`;
+};
+
+const EMOJI_ST_CATEGORIES = [
+  {
+    title: 'Smileys & Emotion',
+    emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🫣', '🤭', '🥱', '🤫', '🤥', '😶', '😐', '😑', '😬', '🫨', '🫠', '🙄', '😯', '😦', '😧', '😮', '😲', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕']
+  },
+  {
+    title: 'Love & Gestures',
+    emojis: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '🫶', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🫵', '❤️', '🩷', '🧡', '💛', '💚', '💙', '🩵', '💜', '🤎', '🖤', '🩶', '🤍', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟']
+  },
+  {
+    title: 'Premium Stickers',
+    emojis: ['🔥', '✨', '🌟', '⭐', '⚡', '💥', '🌈', '☀️', '🌤️', '⛅', '🌥️', '☁️', '🌦️', '🌧️', '⛈️', '🌩️', '❄️', '☃️', '⛄', '🌬️', '💨', '🌪️', '🌫️', '🌊', '💧', '💦', '🫧']
+  },
+  {
+    title: 'Objects & Fun',
+    emojis: ['🎉', '🎊', '🎈', '🎁', '🎂', '🎄', '🎆', '🎇', '🧨', '🧿', '🪄', '🔮', '🧸', '🎮', '🕹️', '🎨', '🎬', '🎤', '🎧', '🎼', '🎵', '🎶', '🎺', '🎸', '🎹', '🎻', '🥁', '📱', '💻', '📷', '📹', '📽️', '💡', '🔦', '🕯️', '💵', '💎', '🔑', '🔒', '🍕', '🍔', '🍟', '🌭', '🍿', '🍩', '🍪', '🍫', '🍬', '🍦', '🍨', '🍧', '🍰', '☕', '🥤', '🍺', '🍻', '🍷', '🍹']
+  }
+];
 
 interface Overlay {
   id: string;
@@ -398,6 +425,9 @@ const ms = StyleSheet.create({
 
 // ─── Main VideoEditor Component ─────────────────────────────────────────────────
 export default function VideoEditor({ route, navigation }: { route?: any; navigation?: any }) {
+  const { hasPermission: hasCameraPermission, requestPermission: requestCameraPermission } = useCameraPermission();
+  const { hasPermission: hasMicrophonePermission, requestPermission: requestMicrophonePermission } = useMicrophonePermission();
+
   // Video state
   const videoRef = useRef<any>(null);
   const loadRequestId = useRef(0);
@@ -423,6 +453,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   // Overlays
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
+  const [emojiModalVisible, setEmojiModalVisible] = useState(false);
   const nextId = useRef(1);
 
   // Social modal state (open when incoming category is Social Media)
@@ -436,6 +467,24 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<string | null>(null);
   const [musicVolume, setMusicVolume] = useState(0.7);
   const [iTunesModalVisible, setITunesModalVisible] = useState(false);
+  const [preRecordMusic, setPreRecordMusic] = useState<MusicTrack | null>(null);
+  const [musicSelectMode, setMusicSelectMode] = useState<'editor' | 'pre-record'>('editor');
+  const preRecordSoundRef = useRef<any>(null);
+
+  // Custom camera recording states
+  const [customCameraVisible, setCustomCameraVisible] = useState(false);
+  const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const [cameraPosition, setCameraPosition] = useState<'back' | 'front'>('back');
+  const [flash, setFlash] = useState<'off' | 'on'>('off');
+  const cameraRef = useRef<any>(null);
+  const recordingTimerRef = useRef<any>(null);
+  const device = useCameraDevice(cameraPosition);
+  const videoOutput = useVideoOutput({
+    enableAudio: true
+  });
+  const recorderRef = useRef<any>(null);
 
   // Slideshow creation state
   const [slideshowModalVisible, setSlideshowModalVisible] = useState(false);
@@ -539,6 +588,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       setNaturalSize({ width: data.naturalSize.width, height: data.naturalSize.height });
     }
     setVideoLoading(false);
+
+    // Sync pre-recorded music track end time to full duration when loaded
+    setMusicTracks(prev => prev.map(t => t.endTime === 10 ? { ...t, endTime: data.duration } : t));
+
     try {
       setTimeout(() => {
         if (videoRef.current?.seek) {
@@ -806,17 +859,248 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     setShowSocialModal(true);
   }, []);
 
-  const recordVideo = async () => {
-    try {
-      const res = await launchCamera({ mediaType: 'video', videoQuality: 'high', durationLimit: 300, saveToPhotos: true });
-      if (res.didCancel) return;
-      if (res.errorCode) { Alert.alert('Camera Error', res.errorMessage || res.errorCode); return; }
-      const uri = res.assets?.[0]?.uri;
-      if (uri) {
-        await loadVideoSource(uri, { autoplay: false, clearOverlays: true });
+  // Cleanup pre-recording sound when custom camera is closed
+  useEffect(() => {
+    if (!customCameraVisible) {
+      if (preRecordSoundRef.current) {
+        try {
+          preRecordSoundRef.current.stop();
+          preRecordSoundRef.current.release();
+        } catch {}
+        preRecordSoundRef.current = null;
       }
+      // Reset Sound category to Playback when camera closes
+      try {
+        const Sound = require('react-native-sound');
+        Sound.setCategory('Playback', true);
+      } catch (err) {
+        console.warn('Failed to reset Sound category', err);
+      }
+    }
+  }, [customCameraVisible]);
+
+  // Cleanup pre-recording sound when component unmounts
+  useEffect(() => {
+    return () => {
+      if (preRecordSoundRef.current) {
+        try {
+          preRecordSoundRef.current.stop();
+          preRecordSoundRef.current.release();
+        } catch {}
+        preRecordSoundRef.current = null;
+      }
+      // Reset Sound category to Playback on unmount
+      try {
+        const Sound = require('react-native-sound');
+        Sound.setCategory('Playback', true);
+      } catch (err) {
+        console.warn('Failed to reset Sound category on unmount', err);
+      }
+    };
+  }, []);
+
+  const checkCameraPermissions = async () => {
+    try {
+      if (hasCameraPermission && hasMicrophonePermission) {
+        setCameraPermissionGranted(true);
+        return true;
+      }
+
+      const camGranted = hasCameraPermission ? true : await requestCameraPermission();
+      const micGranted = hasMicrophonePermission ? true : await requestMicrophonePermission();
+
+      if (camGranted && micGranted) {
+        setCameraPermissionGranted(true);
+        return true;
+      } else {
+        Alert.alert('Permission Denied', 'Camera and microphone permissions are required to record video.');
+        return false;
+      }
+    } catch (err) {
+      console.warn('Failed to check camera permissions', err);
+      return false;
+    }
+  };
+
+  const startCameraRecording = async () => {
+    if (!cameraRef.current) return;
+    try {
+      setIsRecording(true);
+      setRecordDuration(0);
+      
+      // Start recording timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordDuration(d => d + 1);
+      }, 1000);
+
+      // Play pre-recording sound if selected
+      if (preRecordMusic) {
+        try {
+          // Release existing sound if any
+          if (preRecordSoundRef.current) {
+            try {
+              preRecordSoundRef.current.stop();
+              preRecordSoundRef.current.release();
+            } catch {}
+            preRecordSoundRef.current = null;
+          }
+
+          const Sound = require('react-native-sound');
+          // PlayAndRecord with mixWithOthers=true allows playing audio while recording video with audio
+          Sound.setCategory('PlayAndRecord', true);
+          
+          // Clean file:// prefix for react-native-sound
+          const soundUri = preRecordMusic.uri.startsWith('file://')
+            ? preRecordMusic.uri.replace('file://', '')
+            : preRecordMusic.uri;
+
+          await new Promise<void>((resolve) => {
+            const sound = new Sound(soundUri, '', (error: any) => {
+              if (error) {
+                console.warn('Failed to load pre-record sound', error);
+                resolve();
+              } else {
+                sound.setVolume(1.0);
+                sound.play((success: any) => {
+                  console.log('Sound playback finished', success);
+                });
+                preRecordSoundRef.current = sound;
+                // Wait a short delay (300ms) for audio buffering and play start before starting video recording
+                setTimeout(resolve, 300);
+              }
+            });
+          });
+        } catch (soundErr) {
+          console.warn('Sound playback error', soundErr);
+        }
+      }
+
+      const recorder = await videoOutput.createRecorder({});
+      recorderRef.current = recorder;
+
+      await recorder.startRecording(
+        async (filePath: string) => {
+          clearInterval(recordingTimerRef.current);
+          setIsRecording(false);
+          
+          // Stop and release sound safely
+          if (preRecordSoundRef.current) {
+            const soundToRelease = preRecordSoundRef.current;
+            preRecordSoundRef.current = null;
+            try {
+              soundToRelease.stop(() => {
+                try {
+                  soundToRelease.release();
+                } catch (e) {
+                  console.warn('Failed to release sound', e);
+                }
+              });
+            } catch (err) {
+              try {
+                soundToRelease.release();
+              } catch (e) {
+                console.warn('Failed to release sound', e);
+              }
+            }
+          }
+
+          // Load the recorded video into editor
+          if (filePath) {
+            const videoUri = `file://${filePath}`;
+            await loadVideoSource(videoUri, { autoplay: false, clearOverlays: true });
+            
+            // Automatically import the music track
+            if (preRecordMusic) {
+              const trackToAdd: MusicTrack = {
+                ...preRecordMusic,
+                startTime: 0,
+                endTime: 10,
+                volume: 0.8
+              };
+              const updated = [trackToAdd];
+              setMusicTracks(updated);
+              setSelectedMusicTrack(trackToAdd.id);
+              setVolume(0.1);
+              commitHistory({ musicTracks: updated });
+            }
+            
+            setCustomCameraVisible(false);
+          }
+        },
+        (error: any) => {
+          clearInterval(recordingTimerRef.current);
+          setIsRecording(false);
+          
+          // Stop and release sound safely
+          if (preRecordSoundRef.current) {
+            const soundToRelease = preRecordSoundRef.current;
+            preRecordSoundRef.current = null;
+            try {
+              soundToRelease.stop(() => {
+                try {
+                  soundToRelease.release();
+                } catch (e) {
+                  console.warn('Failed to release sound', e);
+                }
+              });
+            } catch (err) {
+              try {
+                soundToRelease.release();
+              } catch (e) {
+                console.warn('Failed to release sound', e);
+              }
+            }
+          }
+          console.error('Camera recording error', error);
+          Alert.alert('Recording Error', 'Failed to record video.');
+        }
+      );
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Unable to record video.');
+      clearInterval(recordingTimerRef.current);
+      setIsRecording(false);
+      
+      // Stop and release sound safely
+      if (preRecordSoundRef.current) {
+        const soundToRelease = preRecordSoundRef.current;
+        preRecordSoundRef.current = null;
+        try {
+          soundToRelease.stop(() => {
+            try {
+              soundToRelease.release();
+            } catch (e) {
+              console.warn('Failed to release sound', e);
+            }
+          });
+        } catch (err) {
+          try {
+            soundToRelease.release();
+          } catch (e) {
+            console.warn('Failed to release sound', e);
+          }
+        }
+      }
+      Alert.alert('Error', err.message || 'Could not start recording.');
+    }
+  };
+
+  const stopCameraRecording = async () => {
+    if (!recorderRef.current) return;
+    try {
+      await recorderRef.current.stopRecording();
+    } catch (err: any) {
+      console.warn('Stop recording failed', err);
+    }
+  };
+
+  const handleOpenCustomCamera = async () => {
+    const hasPermission = await checkCameraPermissions();
+    if (hasPermission) {
+      // Automatically pre-populate preRecordMusic from the active editor music track if none is set
+      const activeTrack = musicTracks.find(t => t.id === selectedMusicTrack);
+      if (activeTrack && !preRecordMusic) {
+        setPreRecordMusic(activeTrack);
+      }
+      setCustomCameraVisible(true);
     }
   };
 
@@ -882,11 +1166,16 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         }
       };
 
-      const updated = [...musicTracks, newTrack];
-      setMusicTracks(updated);
-      setSelectedMusicTrack(newTrack.id);
-      setITunesModalVisible(false);
-      commitHistory({ musicTracks: updated });
+      if (musicSelectMode === 'pre-record') {
+        setPreRecordMusic(newTrack);
+        setITunesModalVisible(false);
+      } else {
+        const updated = [...musicTracks, newTrack];
+        setMusicTracks(updated);
+        setSelectedMusicTrack(newTrack.id);
+        setITunesModalVisible(false);
+        commitHistory({ musicTracks: updated });
+      }
     } catch (err: any) {
       Alert.alert('Download Failed', err.message || 'Unable to download track preview.');
     } finally {
@@ -989,6 +1278,32 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     commitHistory({ overlays: updated });
     setTextInput('');
     setTextModalVisible(false);
+  };
+
+  // ── emoji sticker overlay ──
+  const addEmojiOverlay = (emoji: string) => {
+    const id = `emoji_${nextId.current++}`;
+    const uri = getTwemojiUrl(emoji);
+    const item: Overlay = {
+      id,
+      type: 'emoji',
+      text: emoji,
+      x: PREVIEW_W / 2 - 40,
+      y: PREVIEW_H / 2 - 40,
+      width: 80,
+      height: 80,
+      rotation: 0,
+      uri,
+      opacity: 1,
+      borderRadius: 0,
+      startTime: 0,
+      endTime: duration || 10,
+    };
+    const updated = [...overlays, item];
+    setOverlays(updated);
+    setSelectedOverlay(id);
+    commitHistory({ overlays: updated });
+    setEmojiModalVisible(false);
   };
 
   const updateOverlay = (id: string, patch: Partial<Overlay>) =>
@@ -1162,8 +1477,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         }));
       formData.append('textOverlays', JSON.stringify(textOverlaysPayload));
 
-      // Logo overlays
-      const imageOverlays = overlays.filter(o => o.type === 'image');
+      // Logo overlays (includes both user images and emoji stickers)
+      const imageOverlays = overlays.filter(o => o.type === 'image' || o.type === 'emoji');
       const logoOverlaysPayload = imageOverlays.map((o, idx) => ({
         id: o.id,
         filename: `logo_${idx}.png`,
@@ -1513,7 +1828,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   <Icon.Video size={18} color="#fff" />
                   <Text style={styles.emptyBtnLabel}>Gallery</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.emptyBtn, { backgroundColor: '#df103f' }]} onPress={recordVideo}>
+                <TouchableOpacity style={[styles.emptyBtn, { backgroundColor: '#df103f' }]} onPress={handleOpenCustomCamera}>
                   <Icon.Camera size={18} color="#fff" />
                   <Text style={styles.emptyBtnLabel}>Record</Text>
                 </TouchableOpacity>
@@ -1521,6 +1836,52 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   <Icon.Image size={18} color="#fff" />
                   <Text style={styles.emptyBtnLabel}>Slideshow</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* Pre-recording Music Card */}
+              <View style={{ width: '100%', paddingHorizontal: 16, marginTop: 24, alignItems: 'center' }}>
+                <Text style={{ fontSize: 12, color: '#94A3B8', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Pre-Recording Soundtrack
+                </Text>
+                {preRecordMusic ? (
+                  <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1E293B', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#334155' }}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <RNText style={{ fontSize: 20 }}>🎵</RNText>
+                      <View style={{ flex: 1 }}>
+                        <RNText numberOfLines={1} style={{ color: '#F8FAFC', fontSize: 13, fontWeight: '700' }}>
+                          {preRecordMusic.name}
+                        </RNText>
+                        <RNText style={{ color: '#64748B', fontSize: 11 }}>
+                          Ready to sync post-recording
+                        </RNText>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => setPreRecordMusic(null)} style={{ padding: 6 }}>
+                      <RNText style={{ color: '#EF4444', fontSize: 12, fontWeight: 'bold' }}>Remove</RNText>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F172A', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#1E293B', borderStyle: 'dashed', gap: 8 }}
+                    onPress={() => {
+                      setMusicSelectMode('pre-record');
+                      setITunesModalVisible(true);
+                    }}
+                  >
+                    <Icon.Music size={16} color="#df103f" />
+                    <Text style={{ color: '#df103f', fontWeight: '700', fontSize: 13 }}>
+                      Choose Song to Dance & Record
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                
+                {preRecordMusic && (
+                  <View style={{ marginTop: 10, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.2)', width: '100%' }}>
+                    <RNText style={{ color: '#FCA5A5', fontSize: 11, textAlign: 'center', lineHeight: 16 }}>
+                      ⚠️ OS limitations may pause playback when recording. The song will play right before launching, and will be **automatically imported & synced** when you return!
+                    </RNText>
+                  </View>
+                )}
               </View>
             </View>
           )}
@@ -1629,11 +1990,11 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                         })}
                     </View>
 
-                    {/* Image Overlays Lane */}
+                    {/* Image/Emoji Overlays Lane */}
                     <View style={tl.lane}>
-                      <RNText style={tl.laneLabel}>Images</RNText>
+                      <RNText style={tl.laneLabel}>Images & Emojis</RNText>
                       {overlays
-                        .filter(o => o.type === 'image')
+                        .filter(o => o.type === 'image' || o.type === 'emoji')
                         .map(o => {
                           const isSelected = selectedOverlay === o.id;
                           return (
@@ -1641,7 +2002,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                               key={o.id}
                               style={[
                                 tl.block,
-                                tl.imageBlock,
+                                o.type === 'emoji' ? tl.textBlock : tl.imageBlock,
                                 {
                                   left: o.startTime * TIMELINE_SCALE,
                                   width: Math.max(30, (o.endTime - o.startTime) * TIMELINE_SCALE),
@@ -1655,7 +2016,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                               }}
                             >
                               <RNText numberOfLines={1} style={tl.blockText}>
-                                Image
+                                {o.type === 'emoji' ? `Emoji ${o.text || ''}` : 'Image'}
                               </RNText>
                             </TouchableOpacity>
                           );
@@ -1764,7 +2125,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                       <Icon.Video size={18} color="#fff" />
                       <Text style={styles.srcBtnLabel}>Change Video</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 }]} onPress={recordVideo}>
+                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 }]} onPress={handleOpenCustomCamera}>
                       <Icon.Camera size={18} color="#F8FAFC" />
                       <Text style={[styles.srcBtnLabel, { color: '#F8FAFC' }]}>Record</Text>
                     </TouchableOpacity>
@@ -1832,13 +2193,17 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                 <View style={styles.panel}>
                   <Text style={styles.panelTitle}>Add Overlays</Text>
                   <View style={styles.rowBtns}>
-                    <TouchableOpacity style={styles.srcBtn} onPress={() => setTextModalVisible(true)}>
-                      <Icon.Text size={18} color="#fff" />
-                      <Text style={styles.srcBtnLabel}>Add Text</Text>
+                    <TouchableOpacity style={[styles.srcBtn, { paddingVertical: 8 }]} onPress={() => setTextModalVisible(true)}>
+                      <Icon.Text size={16} color="#fff" />
+                      <Text style={[styles.srcBtnLabel, { fontSize: 13 }]}>Add Text</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1 }]} onPress={pickImageOverlay}>
-                      <Icon.Image size={18} color="#F8FAFC" />
-                      <Text style={[styles.srcBtnLabel, { color: '#F8FAFC' }]}>Add Image</Text>
+                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1, paddingVertical: 8 }]} onPress={pickImageOverlay}>
+                      <Icon.Image size={16} color="#F8FAFC" />
+                      <Text style={[styles.srcBtnLabel, { color: '#F8FAFC', fontSize: 13 }]}>Add Image</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1, paddingVertical: 8 }]} onPress={() => setEmojiModalVisible(true)}>
+                      <RNText style={{ fontSize: 16 }}>😀</RNText>
+                      <Text style={[styles.srcBtnLabel, { color: '#F8FAFC', fontSize: 13 }]}>Add Emoji</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -1877,12 +2242,16 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                     </View>
                   )}
 
-                  {/* Selected image overlay editor */}
-                  {selectedItem?.type === 'image' && (
+                  {/* Selected image/emoji overlay editor */}
+                  {(selectedItem?.type === 'image' || selectedItem?.type === 'emoji') && (
                     <View style={styles.overlayEditor}>
-                      <Text style={styles.subTitle}>Edit Image Overlay</Text>
+                      <Text style={styles.subTitle}>
+                        {selectedItem.type === 'emoji' ? 'Edit Emoji Sticker' : 'Edit Image Overlay'}
+                      </Text>
                       <CustomSlider label="Opacity" min={0.1} max={1} step={0.05} value={selectedItem.opacity ?? 1} onChange={v => updateOverlay(selectedItem.id, { opacity: v })} />
-                      <CustomSlider label="Corner Radius" min={0} max={60} step={1} value={selectedItem.borderRadius ?? 0} onChange={v => updateOverlay(selectedItem.id, { borderRadius: v })} />
+                      {selectedItem.type === 'image' && (
+                        <CustomSlider label="Corner Radius" min={0} max={60} step={1} value={selectedItem.borderRadius ?? 0} onChange={v => updateOverlay(selectedItem.id, { borderRadius: v })} />
+                      )}
                       <CustomSlider label="Start Time (Video Offset)" min={0} max={Math.max(0, (selectedItem.endTime || 10) - 0.5)} step={0.1} value={selectedItem.startTime ?? 0} onChange={v => updateOverlay(selectedItem.id, { startTime: v })} suffix="s" />
                       <CustomSlider label="End Time (Video Offset)" min={(selectedItem.startTime ?? 0) + 0.5} max={duration || 10} step={0.1} value={selectedItem.endTime ?? (duration || 10)} onChange={v => updateOverlay(selectedItem.id, { endTime: v })} suffix="s" />
                       <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteOverlay(selectedItem.id)}>
@@ -1907,7 +2276,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
 
                   <TouchableOpacity
                     style={[styles.srcBtn, { marginBottom: 12 }]}
-                    onPress={() => setITunesModalVisible(true)}
+                    onPress={() => {
+                      setMusicSelectMode('editor');
+                      setITunesModalVisible(true);
+                    }}
                   >
                     <Icon.Music size={18} color="#fff" />
                     <Text style={styles.srcBtnLabel}>Search & Add iTunes Music</Text>
@@ -2386,6 +2758,174 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
               </Button>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* ── Add Emoji Modal ── */}
+      <Modal visible={emojiModalVisible} animationType="slide" transparent onRequestClose={() => setEmojiModalVisible(false)}>
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { height: '65%' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Title style={styles.modalTitle}>Add Emoji Sticker</Title>
+              <TouchableOpacity onPress={() => setEmojiModalVisible(false)} style={{ padding: 4 }}>
+                <Icon.Close size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {EMOJI_ST_CATEGORIES.map(category => (
+                <View key={category.title} style={{ marginBottom: 16 }}>
+                  <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
+                    {category.title}
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                    {category.emojis.map(emoji => (
+                      <TouchableOpacity
+                        key={emoji}
+                        onPress={() => addEmojiOverlay(emoji)}
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 8,
+                          backgroundColor: '#1E293B',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          borderWidth: 1,
+                          borderColor: '#334155',
+                        }}
+                      >
+                        <RNText style={{ fontSize: 24 }}>{emoji}</RNText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <Button mode="outlined" textColor="#64748B" style={styles.modalBtn} onPress={() => setEmojiModalVisible(false)}>
+                Close
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Custom In-App Camera Modal ── */}
+      <Modal visible={customCameraVisible} animationType="slide" transparent={false} onRequestClose={() => { if (!isRecording) setCustomCameraVisible(false); }}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          {!device ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color="#df103f" />
+              <RNText style={{ color: '#fff', marginTop: 12 }}>Loading Camera hardware...</RNText>
+              <TouchableOpacity onPress={() => setCustomCameraVisible(false)} style={{ marginTop: 24, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#1E293B', borderRadius: 8 }}>
+                <RNText style={{ color: '#fff' }}>Cancel</RNText>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={StyleSheet.absoluteFillObject}>
+              <Camera
+                ref={cameraRef}
+                style={StyleSheet.absoluteFill}
+                device={device}
+                isActive={customCameraVisible}
+                outputs={[videoOutput]}
+              />
+
+              {/* HUD Header */}
+              <SafeAreaView style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16, paddingTop: 10, flexDirection: 'row', justifyContent: 'space-between', zIndex: 10 }}>
+                <TouchableOpacity
+                  disabled={isRecording}
+                  onPress={() => setCustomCameraVisible(false)}
+                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+                >
+                  <Icon.Close size={20} color="#fff" />
+                </TouchableOpacity>
+
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => setFlash(f => f === 'off' ? 'on' : 'off')}
+                    style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    <RNText style={{ fontSize: 16 }}>{flash === 'on' ? '⚡' : '🔇'}</RNText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    disabled={isRecording}
+                    onPress={() => setCameraPosition(p => p === 'back' ? 'front' : 'back')}
+                    style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    <RNText style={{ fontSize: 16 }}>🔄</RNText>
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
+
+              {/* HUD Footer Controls */}
+              <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: 40, paddingHorizontal: 20, alignItems: 'center', zIndex: 10 }}>
+                {/* Timer Display */}
+                {isRecording && (
+                  <View style={{ backgroundColor: '#EF4444', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 16 }}>
+                    <RNText style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+                      {Math.floor(recordDuration / 60)}:{(recordDuration % 60).toString().padStart(2, '0')}
+                    </RNText>
+                  </View>
+                )}
+
+                {/* Music Banner */}
+                <View style={{ width: '100%', marginBottom: 20, alignItems: 'center' }}>
+                  {preRecordMusic ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                      <RNText style={{ fontSize: 16 }}>🎵</RNText>
+                      <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 12, fontWeight: '700', maxWidth: 200 }}>
+                        {preRecordMusic.name}
+                      </RNText>
+                      {!isRecording && (
+                        <TouchableOpacity onPress={() => setPreRecordMusic(null)}>
+                          <RNText style={{ color: '#EF4444', fontSize: 12, fontWeight: 'bold', marginLeft: 4 }}>×</RNText>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      disabled={isRecording}
+                      onPress={() => {
+                        setMusicSelectMode('pre-record');
+                        setITunesModalVisible(true);
+                      }}
+                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }}
+                    >
+                      <Icon.Music size={12} color="#fff" />
+                      <RNText style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Choose Song to Dance & Record</RNText>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Record Button */}
+                <TouchableOpacity
+                  onPress={isRecording ? stopCameraRecording : startCameraRecording}
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: 40,
+                    borderWidth: 4,
+                    borderColor: '#fff',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(0,0,0,0.1)',
+                  }}
+                >
+                  <View
+                    style={{
+                      width: isRecording ? 36 : 60,
+                      height: isRecording ? 36 : 60,
+                      borderRadius: isRecording ? 8 : 30,
+                      backgroundColor: '#EF4444',
+                    }}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       </Modal>
     </SafeAreaView>

@@ -21,6 +21,10 @@ import BusinessAdsScreen from './src/screens/BusinessAdsScreen';
 import CustomSizeScreen from './src/screens/CustomSizeScreen';
 import PromotionScreen from './src/screens/PromotionScreen';
 import SvgEditorScreen from './src/screens/SvgEditorScreen';
+import EducationScreen from './src/screens/educations/EducationScreen';
+import StudentLoginScreen from './src/screens/student/StudentLoginScreen';
+import StudentRegisterScreen from './src/screens/student/StudentRegisterScreen';
+import StudentDashboardTabs from './src/screens/student/StudentDashboardTabs';
 
 export const navigationRef = createNavigationContainerRef();
 
@@ -60,6 +64,10 @@ function App(): React.JSX.Element {
           <Stack.Screen name="Promotion" component={PromotionScreen} />
           <Stack.Screen name="QRCodeGenerator" component={QRCodeGeneratorScreen} />
           <Stack.Screen name="SvgEditor" component={SvgEditorScreen} />
+          <Stack.Screen name="Education" component={EducationScreen} />
+          <Stack.Screen name="StudentLogin" component={StudentLoginScreen} />
+          <Stack.Screen name="StudentRegister" component={StudentRegisterScreen} />
+          <Stack.Screen name="StudentDashboard" component={StudentDashboardTabs} />
         </Stack.Navigator>
       </NavigationContainer>
     </PaperProvider>

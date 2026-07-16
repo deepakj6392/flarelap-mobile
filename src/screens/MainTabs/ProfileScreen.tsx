@@ -93,6 +93,17 @@ export default function ProfileScreen() {
         </Card.Content>
       </Card>
 
+      <Card style={styles.educationCard} onPress={() => navigation.navigate('Education' as never)}>
+        <Card.Content style={styles.educationCardContent}>
+          <View style={styles.educationTextContainer}>
+            <Text style={styles.educationLabel}>FLARELAP ACADEMY</Text>
+            <Title style={styles.educationTitle}>Explore Courses & Internships</Title>
+            <Text style={styles.educationSub}>Enhance your skills with certified professional programs</Text>
+          </View>
+          <Text style={styles.arrowIcon}>→</Text>
+        </Card.Content>
+      </Card>
+
       <View style={styles.tabsWrap}>
         <SegmentedButtons
           value={tab}
@@ -178,4 +189,50 @@ const styles = StyleSheet.create({
   userTitle: { marginBottom: 4 },
   userEmail: { color: '#64748b' },
   saveBtn: { marginTop: 12 },
+  educationCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    backgroundColor: '#df103f',
+    elevation: 4,
+    shadowColor: '#df103f',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+  educationCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  educationTextContainer: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  educationLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffe4e6',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  educationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginVertical: 0,
+    lineHeight: 22,
+  },
+  educationSub: {
+    fontSize: 12,
+    color: '#fecdd3',
+    marginTop: 4,
+  },
+  arrowIcon: {
+    fontSize: 22,
+    color: '#ffffff',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
 });

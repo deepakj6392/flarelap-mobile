@@ -8,18 +8,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const CATEGORIES = ['All', 'Social Media', 'Business Ads', 'Card Maker', 'Promotion', 'Wallpaper', 'Logos & Sticker'];
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }: any) {
   const [active, setActive] = useState('All');
   const [templates, setTemplates] = useState<Template[]>([]);
 
   useEffect(() => {
     const fetchTemplates = async () => {
-      const data = await getAllTemplates('Social Media');
-      console.log(data)
-      setTemplates(data?.templates);
+      const categoryToFetch = active === 'All' ? 'Social Media' : active;
+      const data = await getAllTemplates(categoryToFetch);
+      console.log(data);
+      setTemplates(data?.templates || []);
     };
     fetchTemplates();
-  }, []);
+  }, [active]);
+
+  const handleTemplatePress = (item: Template) => {
+    navigation.navigate('SvgEditor', {
+      svgUrl: item.svg_url,
+      category: item.category,
+    });
+  };
 
   return (
     <SafeAreaView style={{ backgroundColor: THEME_COLORS.primary }}>
@@ -56,19 +64,22 @@ export default function HomeScreen() {
         keyExtractor={i => i.id}
         numColumns={1}
         contentContainerStyle={styles.templates}
+        scrollEnabled={false}
         renderItem={({ item }) => (
-          <Card style={styles.templateCard}>
-            <Card.Content style={styles.templateContent}>
-               <Image
-                 source={{ uri: item.thumbnail }}
-                 style={styles.thumb}
-                 resizeMode="cover"
-               />
-            </Card.Content>
-            <Card.Actions style={styles.templateFooter}>
-              <Text style={styles.templateLabel}>{item.name}</Text>
-            </Card.Actions>
-          </Card>
+          <TouchableOpacity onPress={() => handleTemplatePress(item)} activeOpacity={0.9}>
+            <Card style={styles.templateCard}>
+              <Card.Content style={styles.templateContent}>
+                 <Image
+                   source={{ uri: item.thumbnail }}
+                   style={styles.thumb}
+                   resizeMode="cover"
+                 />
+              </Card.Content>
+              <Card.Actions style={styles.templateFooter}>
+                <Text style={styles.templateLabel}>{item.name}</Text>
+              </Card.Actions>
+            </Card>
+          </TouchableOpacity>
         )}
       />
     </ScrollView>
