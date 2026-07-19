@@ -28,15 +28,38 @@ export async function requestPasswordReset(payload: { email: string }) {
   const res = await api.post(url, payload);
   return res.data;
 }
-
-export async function confirmPasswordReset(payload: { email: string; code: string; newPassword: string }) {
-  const url = API_ROUTES.RESET_PASSWORD;
+export async function verifyOtp(payload: { email: string; otp: string; }) {
+  const url = API_ROUTES.VERIFY_OTP;
   const res = await api.post(url, payload);
+  return res.data;
+}
+
+export async function confirmPasswordReset(token: string, password: string) {
+  const url = API_ROUTES.RESET_PASSWORD + `/${token}`;
+  const res = await api.post(url, { password });
   return res.data;
 }
 
 export async function refreshToken(payload: { refreshToken: string }) {
   const url = API_ROUTES.REFRESH_TOKEN;
+  const res = await api.post(url, payload);
+  return res.data;
+}
+
+export async function googleLogin(payload: { token: string }) {
+  const url = API_ROUTES.GOOGLE_LOGIN;
+  const res = await api.post(url, payload);
+  return res.data;
+}
+
+export async function facebookLogin(payload: { accessToken: string; userID: string; email?: string }) {
+  const url = API_ROUTES.FACEBOOK_LOGIN;
+  const res = await api.post(url, payload);
+  return res.data;
+}
+
+export async function appleLogin(payload: { identityToken: string; email?: string; fullName?: string }) {
+  const url = API_ROUTES.APPLE_LOGIN;
   const res = await api.post(url, payload);
   return res.data;
 }

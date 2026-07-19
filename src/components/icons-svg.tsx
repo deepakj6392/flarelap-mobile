@@ -134,4 +134,11 @@ const PasswordEyeIcon = ({ visible, size = 22, color = '#64748b' }: { visible: b
     return <EyeIcon size={size} color={color} />;
 };
 
-export { UndoIcon, RedoIcon, PlusIcon, TextIcon, ShapeIcon, ImageIcon, LayersIcon, CanvasIcon, TemplateIcon, ChevronUpIcon, ChevronDownIcon, CloseIcon, DownloadIcon, RotateIcon, TrashIcon, BoldIcon, ItalicIcon, ArrowLeftIcon, EyeIcon, EyeOffIcon, PasswordEyeIcon };
+const SearchIcon = ({ size = 20, color = '#334155' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="11" cy="11" r="8" />
+        <Line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </Svg>
+);
+
+export { UndoIcon, RedoIcon, PlusIcon, TextIcon, ShapeIcon, ImageIcon, LayersIcon, CanvasIcon, TemplateIcon, ChevronUpIcon, ChevronDownIcon, CloseIcon, DownloadIcon, RotateIcon, TrashIcon, BoldIcon, ItalicIcon, ArrowLeftIcon, EyeIcon, EyeOffIcon, PasswordEyeIcon, SearchIcon };

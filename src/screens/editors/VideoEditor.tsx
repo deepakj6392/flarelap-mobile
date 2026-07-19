@@ -1792,7 +1792,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
             </View>
           ) : (
             /* Empty state */
-            <View style={[styles.emptyCanvas, { width: PREVIEW_W, minHeight: PREVIEW_H, paddingVertical: 16 }]}>
+            <ScrollView contentContainerStyle={[styles.emptyCanvas, { width: PREVIEW_W, minHeight: PREVIEW_H, paddingVertical: 16 }]}>
               <Icon.Video size={48} color="#334155" />
               <Title style={styles.emptyTitle}>No Video Selected</Title>
               <Text style={styles.emptySub}>Pick from gallery, record with camera, or use a template to start editing</Text>
@@ -1837,53 +1837,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   <Text style={styles.emptyBtnLabel}>Slideshow</Text>
                 </TouchableOpacity>
               </View>
-
-              {/* Pre-recording Music Card */}
-              <View style={{ width: '100%', paddingHorizontal: 16, marginTop: 24, alignItems: 'center' }}>
-                <Text style={{ fontSize: 12, color: '#94A3B8', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 8 }}>
-                  Pre-Recording Soundtrack
-                </Text>
-                {preRecordMusic ? (
-                  <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1E293B', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#334155' }}>
-                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <RNText style={{ fontSize: 20 }}>🎵</RNText>
-                      <View style={{ flex: 1 }}>
-                        <RNText numberOfLines={1} style={{ color: '#F8FAFC', fontSize: 13, fontWeight: '700' }}>
-                          {preRecordMusic.name}
-                        </RNText>
-                        <RNText style={{ color: '#64748B', fontSize: 11 }}>
-                          Ready to sync post-recording
-                        </RNText>
-                      </View>
-                    </View>
-                    <TouchableOpacity onPress={() => setPreRecordMusic(null)} style={{ padding: 6 }}>
-                      <RNText style={{ color: '#EF4444', fontSize: 12, fontWeight: 'bold' }}>Remove</RNText>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F172A', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#1E293B', borderStyle: 'dashed', gap: 8 }}
-                    onPress={() => {
-                      setMusicSelectMode('pre-record');
-                      setITunesModalVisible(true);
-                    }}
-                  >
-                    <Icon.Music size={16} color="#df103f" />
-                    <Text style={{ color: '#df103f', fontWeight: '700', fontSize: 13 }}>
-                      Choose Song to Dance & Record
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                
-                {preRecordMusic && (
-                  <View style={{ marginTop: 10, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.2)', width: '100%' }}>
-                    <RNText style={{ color: '#FCA5A5', fontSize: 11, textAlign: 'center', lineHeight: 16 }}>
-                      ⚠️ OS limitations may pause playback when recording. The song will play right before launching, and will be **automatically imported & synced** when you return!
-                    </RNText>
-                  </View>
-                )}
-              </View>
-            </View>
+            </ScrollView>
           )}
         </View>
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
-import { Card, Text, Title, Button, SegmentedButtons } from 'react-native-paper';
+import { Card, Text, Button, SegmentedButtons, Icon } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../services/api.service';
@@ -29,7 +29,7 @@ export default function EducationScreen() {
   const navigation = useNavigation();
   const [courses, setCourses] = useState<Course[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('training');
+  const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
@@ -66,8 +66,10 @@ export default function EducationScreen() {
     const matchesSearch = course.programName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.eligibility?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    // Support category match for 'training'/'course' under Training tab, and 'internship' under Internship tab
-    const matchesCategory = activeTab === 'training' 
+    // Support category match for 'all', 'training'/'course' under Training tab, and 'internship' under Internship tab
+    const matchesCategory = activeTab === 'all'
+      ? true
+      : activeTab === 'training'
       ? (course.category === 'training' || course.category === 'course')
       : course.category === 'internship';
 
@@ -117,7 +119,8 @@ export default function EducationScreen() {
           value={activeTab}
           onValueChange={setActiveTab}
           buttons={[
-            { value: 'training', label: 'Training Programs' },
+            { value: 'all', label: 'All' },
+            { value: 'training', label: 'Training' },
             { value: 'internship', label: 'Internships' }
           ]}
           theme={{ colors: { primary: THEME_COLORS.primary } }}
@@ -139,7 +142,7 @@ export default function EducationScreen() {
       ) : filteredCourses.length === 0 ? (
         <ScrollView contentContainerStyle={styles.centerContainer}>
           <Text style={styles.noResultsText}>No courses found matching your criteria.</Text>
-          <Button mode="outlined" onPress={() => { setSearchQuery(''); setActiveTab('training'); }} style={styles.retryBtn}>
+          <Button mode="outlined" onPress={() => { setSearchQuery(''); setActiveTab('all'); }} style={styles.retryBtn}>
             Reset Filters
           </Button>
         </ScrollView>
@@ -392,7 +395,8 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 11,
-    color: '#64748b',
+    color: '#0856c3ff',
+    fontWeight: 'bold',
     marginBottom: 4,
   },
   detailVal: {

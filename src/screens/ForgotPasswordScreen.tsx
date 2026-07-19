@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import Logo from '../components/Logo';
 import { TextInput, Button, Title, Snackbar } from 'react-native-paper';
-import { confirmPasswordReset, requestPasswordReset } from '../services/auth.service';
+import { confirmPasswordReset, requestPasswordReset, verifyOtp } from '../services/auth.service';
 import { PasswordEyeIcon } from '../components/icons-svg';
 
 // Using API service functions instead of local endpoints
@@ -54,9 +54,12 @@ function ForgotPasswordScreen({ navigation }: any) {
 
     setLoading(true);
     try {
-      await confirmPasswordReset({ email, code, newPassword: password });
-      showMessage('Password reset successful. Please login.');
-      setTimeout(() => navigation.replace('Login'), 1200);
+      const result = await verifyOtp({ email, otp: code });
+      if (result?.resetToken) {
+        await confirmPasswordReset(result?.resetToken, password);
+        showMessage('Password reset successful. Please login.');
+        setTimeout(() => navigation.replace('Login'), 1200);
+      }
     } catch (e: any) {
       const msg = e?.response?.data?.message || e?.message || 'Network error';
       showMessage(msg);

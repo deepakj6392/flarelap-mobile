@@ -22,6 +22,8 @@ import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import { Template } from '../../../types/template';
 import { getAllTemplates, svgUrlToFabricJSON, FabricObject, svgStringToFabricJSON } from '../../services/template.service';
+import PaidSubscriptionDialog from '../../components/common/PaidSubscriptionDialog';
+import api from '../../services/api.service';
 import {
   UndoIcon,
   RedoIcon,
@@ -115,7 +117,7 @@ const resolveRelativeUrl = (baseUrl: string | null | undefined, relativeUrl: str
 
   try {
     return new URL(trimmed, baseToUse).href;
-  } catch (e) {
+  } catch {
     if (trimmed.startsWith('/')) {
       const match = baseToUse.match(/^(https?:\/\/[^\/]+)/);
       if (match) {
@@ -874,6 +876,9 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
   const [subCategory, setSubCategory] = useState<string | null>(null);
   const [showSocialModal, setShowSocialModal] = useState(false);
   const [canvasMetrics, setCanvasMetrics] = useState<CanvasMetrics>(DEFAULT_CANVAS_METRICS);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [selectedTemplateForPurchase, setSelectedTemplateForPurchase] = useState<Template | null>(null);
   // Toolbar & Panels state
   const [activeTab, setActiveTab] = useState<'templates' | 'add' | 'styles' | 'layers' | 'canvas'>('templates');
   const [editorPanelHidden, setEditorPanelHidden] = useState(false);
@@ -935,6 +940,30 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     }
   }, [incomingCategory]);
 
+  // Fetch subscription state on mount and when screen is focused
+  useEffect(() => {
+    const checkSubscription = async () => {
+      try {
+        const res = await api.get('/api/subscriptions/me');
+        const hasActive = Array.isArray(res.data?.subscriptions) &&
+          res.data.subscriptions.some((sub: any) => sub.status === 'active');
+        setIsSubscribed(!!hasActive);
+      } catch (err) {
+        console.warn('Error fetching subscription status in editor:', err);
+        setIsSubscribed(false);
+      }
+    };
+
+    checkSubscription();
+
+    if (navigation && typeof navigation.addListener === 'function') {
+      const unsubscribe = navigation.addListener('focus', () => {
+        checkSubscription();
+      });
+      return unsubscribe;
+    }
+  }, [navigation]);
+
   // Load initial URL SVG if provided
   useEffect(() => {
     let mounted = true;
@@ -944,7 +973,6 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
       setLoading(true);
       try {
         let fabricJSON: any;
-        let processedCleanSvgText: string | null = null;
         let localFileMap = new Map<string, string>();
 
         if (svgUrl) {
@@ -954,12 +982,10 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
           const bgRes = await fetch(resolvedCleanSvgUrl);
           const rawSvgText = bgRes.ok ? await bgRes.text() : null;
           const processed = await processSvgBase64Images(rawSvgText);
-          processedCleanSvgText = processed.cleanSvgText;
           localFileMap = processed.localFileMap;
         } else if (initialSvgText) {
           fabricJSON = await svgStringToFabricJSON(initialSvgText);
           const processed = await processSvgBase64Images(initialSvgText);
-          processedCleanSvgText = processed.cleanSvgText;
           localFileMap = processed.localFileMap;
         }
 
@@ -1206,6 +1232,12 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
 
   // Load SVG Template via Fabric.js JSON API
   const handleLoadTemplate = (tmpl: Template | null) => {
+    if (tmpl && tmpl.is_paid && !isSubscribed) {
+      setSelectedTemplateForPurchase(tmpl);
+      setIsPurchaseModalOpen(true);
+      return;
+    }
+
     const performLoad = async () => {
       if (!tmpl) {
         setSvgText(null);
@@ -1285,7 +1317,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
         // Use the clean SVG URL (returned by API) as the background layer and cache base64 images
         const bgRes = await fetch(tmpl.svg_url);
         const rawSvgText = bgRes.ok ? await bgRes.text() : null;
-        const { cleanSvgText, localFileMap } = await processSvgBase64Images(rawSvgText);
+        const { localFileMap } = await processSvgBase64Images(rawSvgText);
 
         // Map Fabric objects → editable items
         const fabricItems = await mapFabricObjectsToItems(fabricJSON.objects, nextId, tmpl.svg_url, localFileMap);
@@ -1584,6 +1616,11 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                     >
                       <View style={[styles.templateCardPreview]}>
                         <Image source={{ uri: tmpl.thumbnail }} style={styles.templateImage} />
+                        {tmpl.is_paid && (
+                          <View style={styles.premiumBadge}>
+                            <Text style={styles.premiumBadgeText}>★ PRO</Text>
+                          </View>
+                        )}
                       </View>
                       <Text style={styles.templateLabel} numberOfLines={1}>
                         {tmpl.name}
@@ -2030,6 +2067,20 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
             <Button onPress={() => setShowSocialModal(false)} style={styles.modalCloseBtn}>Close</Button>
           </Modal>
         </Portal>
+
+        <PaidSubscriptionDialog
+          visible={isPurchaseModalOpen}
+          onDismiss={() => setIsPurchaseModalOpen(false)}
+          templateName={selectedTemplateForPurchase?.name}
+          onViewPricing={() => {
+            setIsPurchaseModalOpen(false);
+            if (navigation && typeof navigation.navigate === 'function') {
+              navigation.navigate('Pricing' as never);
+            } else {
+              Alert.alert('Navigation Error', 'Pricing screen is currently unavailable.');
+            }
+          }}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -2341,4 +2392,19 @@ const styles = StyleSheet.create({
   modalTemplateCard: { width: '48%', alignItems: 'center', marginBottom: 10 },
   modalTemplatePreview: { width: 150, height: 150, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 6, backgroundColor: '#f8fafc' },
   modalCloseBtn: { marginTop: 8, borderRadius: 8 },
+  premiumBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: '#eab308',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    zIndex: 10,
+  },
+  premiumBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
 });

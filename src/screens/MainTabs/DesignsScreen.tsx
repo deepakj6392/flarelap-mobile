@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api.service';
 import { THEME_COLORS } from '../../constants';
+import { SearchIcon } from '../../components/icons-svg';
 
 function DesignCard({ item }: { item: any }) {
   const navigation = useNavigation<any>();
@@ -49,11 +50,13 @@ function DesignCard({ item }: { item: any }) {
   );
 }
 
+const CustomSearchIcon = (props: any) => <SearchIcon {...props} color={THEME_COLORS.primary} />;
+
 export default function DesignsScreen() {
   const [designs, setDesigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [total, setTotal] = useState(0);
+  const [, setTotal] = useState(0);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [grid, setGrid] = useState(true);
@@ -143,6 +146,7 @@ export default function DesignsScreen() {
                   onChangeText={setQuery}
                   style={styles.search}
                   inputStyle={styles.searchInput}
+                  icon={CustomSearchIcon}
                 />
                 <View style={styles.viewToggle}>
                   <TouchableOpacity

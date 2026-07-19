@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Svg, { Path, Rect } from 'react-native-svg';
 import StudentOverviewScreen from './StudentOverviewScreen';
 import StudentClassScreen from './StudentClassScreen';
+import StudentActivityScreen from './StudentActivityScreen';
 import StudentSupportScreen from './StudentSupportScreen';
 import StudentProfileScreen from './StudentProfileScreen';
 
@@ -22,6 +23,12 @@ const ClassIcon = ({ color, size }: { color: string; size: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <Path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
     <Path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+  </Svg>
+);
+
+const ActivityIcon = ({ color, size }: { color: string; size: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M22 12h-4l-3 9L9 3l-3 9H2" />
   </Svg>
 );
 
@@ -73,6 +80,14 @@ export default function StudentDashboardTabs() {
         options={{
           tabBarLabel: 'My Class',
           tabBarIcon: (props) => <ClassIcon {...props} />,
+        }}
+      />
+      <Tab.Screen
+        name="Activity"
+        component={StudentActivityScreen}
+        options={{
+          tabBarLabel: 'Activity',
+          tabBarIcon: (props) => <ActivityIcon {...props} />,
         }}
       />
       <Tab.Screen

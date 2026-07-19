@@ -13,7 +13,7 @@ function SignupScreen({ navigation }: any) {
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [street, setStreet] = useState('');
-  const [country, setCountry] = useState('');
+  const [country, setCountry] = useState('India');
   const [pincode, setPincode] = useState('');
   const [stateVal, setStateVal] = useState('');
   const [city, setCity] = useState('');
@@ -79,9 +79,8 @@ function SignupScreen({ navigation }: any) {
 
         <View style={styles.row}>
           <TextInput label="Country" mode="outlined" outlineStyle={styles.roundInput} value={country} onChangeText={setCountry} style={[styles.input, styles.half]} placeholder="Select country" />
-          <TextInput label="Pincode" mode="outlined" outlineStyle={styles.roundInput} value={pincode} onChangeText={setPincode} style={[styles.input, styles.half, styles.rightInput]} keyboardType="numeric" />
+          <TextInput label="Pincode" mode="outlined" maxLength={6} outlineStyle={styles.roundInput} value={pincode} onChangeText={setPincode} style={[styles.input, styles.half, styles.rightInput]} keyboardType="numeric" />
         </View>
-
         <View style={styles.row}>
           <TextInput label="State" mode="outlined" outlineStyle={styles.roundInput} value={stateVal} onChangeText={setStateVal} style={[styles.input, styles.half]} placeholder="Select state" />
           <TextInput label="City" mode="outlined" outlineStyle={styles.roundInput} value={city} onChangeText={setCity} style={[styles.input, styles.half, styles.rightInput]} placeholder="Select city" />
@@ -92,8 +91,8 @@ function SignupScreen({ navigation }: any) {
           try {
             const payload = { username, fullName, email, password, street, country, pincode, state: stateVal, city };
             const res = await signup(payload);
-            if (res && (res.token || res.accessToken)) {
-              setAuthToken(res.token || res.accessToken);
+            if (res && (res.token || res.access_token)) {
+              setAuthToken(res.token || res.access_token);
             }
             showMessage('Account created successfully');
             setTimeout(() => navigation.replace && navigation.replace('Main'), 800);

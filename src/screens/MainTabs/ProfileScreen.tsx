@@ -96,7 +96,7 @@ export default function ProfileScreen() {
       <Card style={styles.educationCard} onPress={() => navigation.navigate('Education' as never)}>
         <Card.Content style={styles.educationCardContent}>
           <View style={styles.educationTextContainer}>
-            <Text style={styles.educationLabel}>FLARELAP ACADEMY</Text>
+            <Text style={styles.educationLabel}>Flarelap Education</Text>
             <Title style={styles.educationTitle}>Explore Courses & Internships</Title>
             <Text style={styles.educationSub}>Enhance your skills with certified professional programs</Text>
           </View>

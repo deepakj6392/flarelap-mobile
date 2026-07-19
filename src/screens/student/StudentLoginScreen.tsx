@@ -42,6 +42,7 @@ export default function StudentLoginScreen() {
     setLoading(true);
     try {
       const res = await studentLogin({ studentId, password });
+      console.log("Login Result ", res);
       if (res && res.token) {
         // Save session locally
         await saveStudentSession(res.token, res.student || res.user);

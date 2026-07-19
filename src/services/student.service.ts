@@ -110,3 +110,14 @@ export async function verifyStudentPayment(payload: { razorpay_order_id: string;
   const res = await api.post('/student-payments/verify-payment', payload);
   return res.data;
 }
+
+export async function getStudentActivities(studentId: string) {
+  const res = await api.get(`/student-activities/${studentId}`);
+  return res.data;
+}
+
+export async function addStudentActivity(payload: any) {
+  const res = await api.post('/student-activities/add', payload);
+  return res.data;
+}
+

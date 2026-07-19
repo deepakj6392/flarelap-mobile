@@ -25,6 +25,7 @@ import EducationScreen from './src/screens/educations/EducationScreen';
 import StudentLoginScreen from './src/screens/student/StudentLoginScreen';
 import StudentRegisterScreen from './src/screens/student/StudentRegisterScreen';
 import StudentDashboardTabs from './src/screens/student/StudentDashboardTabs';
+import PricingScreen from './src/screens/PricingScreen';
 
 export const navigationRef = createNavigationContainerRef();
 
@@ -68,6 +69,7 @@ function App(): React.JSX.Element {
           <Stack.Screen name="StudentLogin" component={StudentLoginScreen} />
           <Stack.Screen name="StudentRegister" component={StudentRegisterScreen} />
           <Stack.Screen name="StudentDashboard" component={StudentDashboardTabs} />
+          <Stack.Screen name="Pricing" component={PricingScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </PaperProvider>

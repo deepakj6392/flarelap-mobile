@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, ScrollView, Platform, TouchableOpacity, Alert } from 'react-native';
 import Logo from '../components/Logo';
-import { Text, TextInput, Button, Title } from 'react-native-paper';
+import { Text, TextInput, Button, Title, Portal, Modal } from 'react-native-paper';
 import { setAuthToken } from '../services/api.service';
-import { login } from '../services/auth.service';
+import { login, googleLogin, facebookLogin, appleLogin } from '../services/auth.service';
 import { saveTokens } from '../services/token.service';
 import { THEME_COLORS } from '../constants';
 import Svg, { Path } from 'react-native-svg';
@@ -55,6 +55,12 @@ function LoginScreen({ navigation }: any) {
   const passwordRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Facebook missing email prompt states
+  const [emailPromptVisible, setEmailPromptVisible] = useState(false);
+  const [promptEmail, setPromptEmail] = useState('');
+  const [promptEmailError, setPromptEmailError] = useState<string | null>(null);
+  const [pendingFbData, setPendingFbData] = useState<{ accessToken: string; userID: string } | null>(null);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -90,15 +96,21 @@ function LoginScreen({ navigation }: any) {
     setError(null);
     setLoading(true);
     try {
-      let token = '';
+      let sessionToken = '';
       if (provider === 'Google') {
-        await GoogleSignin.hasPlayServices();
+        await GoogleSignin.hasPlayServices({showPlayServicesUpdateDialog: true});
         const userInfo = await GoogleSignin.signIn();
+        console.log(userInfo, "sgsgsdgsdg")
         const idToken = (userInfo as any).idToken || (userInfo as any).data?.idToken;
         if (!idToken) {
           throw new Error('Google Sign-In succeeded, but no ID Token was received.');
         }
-        token = idToken;
+        const response = await googleLogin({ token: idToken });
+        console.log(response, idToken)
+        if (!response.token) {
+          throw new Error('Backend Google login failed.');
+        }
+        sessionToken = response.token;
       } else if (provider === 'Facebook') {
         const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
         if (result.isCancelled) {
@@ -108,7 +120,25 @@ function LoginScreen({ navigation }: any) {
         if (!data || !data.accessToken) {
           throw new Error('Facebook Login succeeded, but failed to obtain access token.');
         }
-        token = data.accessToken;
+        
+        try {
+          const response = await facebookLogin({ accessToken: data.accessToken, userID: data.userID });
+          if (!response.token) {
+            throw new Error('Backend Facebook login failed.');
+          }
+          sessionToken = response.token;
+        } catch (fbErr: any) {
+          const fbBackendMsg = fbErr?.response?.data?.message || fbErr?.message || '';
+          if (fbBackendMsg.includes('Email is required')) {
+            setPendingFbData({ accessToken: data.accessToken, userID: data.userID });
+            setPromptEmail('');
+            setPromptEmailError(null);
+            setEmailPromptVisible(true);
+            setLoading(false);
+            return;
+          }
+          throw fbErr;
+        }
       } else if (provider === 'Apple') {
         if (Platform.OS === 'ios') {
           const appleAuthRequestResponse = await appleAuth.performRequest({
@@ -117,10 +147,26 @@ function LoginScreen({ navigation }: any) {
           });
           const credentialState = await appleAuth.getCredentialStateForUser(appleAuthRequestResponse.user);
           if (credentialState === appleAuth.State.AUTHORIZED) {
-            token = appleAuthRequestResponse.identityToken || '';
-            if (!token) {
+            const identityToken = appleAuthRequestResponse.identityToken || '';
+            if (!identityToken) {
               throw new Error('Apple Sign-In succeeded, but no Identity Token was received.');
             }
+            let fullNameStr = '';
+            if (appleAuthRequestResponse.fullName) {
+              const first = appleAuthRequestResponse.fullName.givenName || '';
+              const last = appleAuthRequestResponse.fullName.familyName || '';
+              fullNameStr = `${first} ${last}`.trim();
+            }
+            const email = appleAuthRequestResponse.email || '';
+            const response = await appleLogin({
+              identityToken,
+              email,
+              fullName: fullNameStr || undefined,
+            });
+            if (!response.token) {
+              throw new Error('Backend Apple login failed.');
+            }
+            sessionToken = response.token;
           } else {
             throw new Error('Apple Sign-In failed or was unauthorized.');
           }
@@ -130,19 +176,20 @@ function LoginScreen({ navigation }: any) {
       } else {
         // Simulate network request/OAuth flow delay
         await new Promise<void>((resolve) => setTimeout(() => resolve(), 800));
-        token = `mock-${provider.toLowerCase()}-token-${Date.now()}`;
+        sessionToken = `mock-${provider.toLowerCase()}-token-${Date.now()}`;
       }
 
-      setAuthToken(token);
+      setAuthToken(sessionToken);
       try {
         await saveTokens({
-          accessToken: token,
+          accessToken: sessionToken,
           refreshToken: `mock-refresh-token-${Date.now()}`,
         });
       } catch { }
       Alert.alert('Success', `Logged in successfully with ${provider}!`);
       navigation.replace && navigation.replace('Main');
     } catch (err: any) {
+      const backendMsg = err?.response?.data?.message || err?.response?.data?.errors?.[0]?.message;
       if (provider === 'Google') {
         if (err.code === statusCodes.SIGN_IN_CANCELLED) {
           setError('Google Login cancelled by user.');
@@ -151,15 +198,63 @@ function LoginScreen({ navigation }: any) {
         } else if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
           setError('Google Play Services not available or outdated.');
         } else {
-          setError(err.message || 'Google Login failed');
+          setError(backendMsg || err.message || 'Google Login failed');
         }
       } else if (provider === 'Facebook') {
-        setError(err.message || 'Facebook Login failed');
+        setError(backendMsg || err.message || 'Facebook Login failed');
       } else if (provider === 'Apple') {
-        setError(err.message || 'Apple Login failed');
+        setError(backendMsg || err.message || 'Apple Login failed');
       } else {
-        setError(`${provider} login failed`);
+        setError(backendMsg || `${provider} login failed`);
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleFbEmailSubmit = async () => {
+    if (!promptEmail) {
+      setPromptEmailError('Email is required');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(promptEmail)) {
+      setPromptEmailError('Please enter a valid email address');
+      return;
+    }
+    if (!pendingFbData) {
+      setEmailPromptVisible(false);
+      return;
+    }
+
+    setPromptEmailError(null);
+    setLoading(true);
+    try {
+      const response = await facebookLogin({ 
+        accessToken: pendingFbData.accessToken, 
+        userID: pendingFbData.userID,
+        email: promptEmail 
+      });
+      
+      if (!response.token) {
+        throw new Error('Backend Facebook login failed.');
+      }
+
+      setEmailPromptVisible(false);
+      setPendingFbData(null);
+      
+      const sessionToken = response.token;
+      setAuthToken(sessionToken);
+      try {
+        await saveTokens({
+          accessToken: sessionToken,
+          refreshToken: response.refresh_token || `mock-refresh-token-${Date.now()}`,
+        });
+      } catch { }
+      Alert.alert('Success', 'Logged in successfully with Facebook!');
+      navigation.replace && navigation.replace('Main');
+    } catch (err: any) {
+      const backendMsg = err?.response?.data?.message || err?.message || 'Facebook Login failed';
+      setPromptEmailError(backendMsg);
     } finally {
       setLoading(false);
     }
@@ -257,6 +352,68 @@ function LoginScreen({ navigation }: any) {
           </Button>
         </View>
       </ScrollView>
+
+      {/* Facebook Email Prompt Dialog */}
+      <Portal>
+        <Modal
+          visible={emailPromptVisible}
+          onDismiss={() => {
+            if (!loading) {
+              setEmailPromptVisible(false);
+              setPendingFbData(null);
+            }
+          }}
+          contentContainerStyle={styles.dialogContainer}
+        >
+          <Title style={styles.dialogTitle}>Email Required</Title>
+          <Text style={styles.dialogSubtitle}>
+            Your Facebook account did not share an email address. Please provide an email to complete your registration.
+          </Text>
+          
+          {promptEmailError ? (
+            <Text style={styles.dialogErrorText}>{promptEmailError}</Text>
+          ) : null}
+
+          <TextInput
+            mode="outlined"
+            label="Email Address"
+            style={styles.dialogInput}
+            dense
+            keyboardType="email-address"
+            value={promptEmail}
+            onChangeText={setPromptEmail}
+            autoCapitalize="none"
+            returnKeyType="done"
+            onSubmitEditing={handleFbEmailSubmit}
+            disabled={loading}
+          />
+
+          <View style={styles.dialogActions}>
+            <Button
+              mode="outlined"
+              onPress={() => {
+                setEmailPromptVisible(false);
+                setPendingFbData(null);
+              }}
+              style={styles.dialogButton}
+              textColor="#475569"
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleFbEmailSubmit}
+              style={[styles.dialogButton, styles.dialogSubmitBtn]}
+              buttonColor={THEME_COLORS.primary}
+              loading={loading}
+              disabled={loading}
+            >
+              Submit
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
     </KeyboardAvoidingView>
   );
 }
@@ -309,6 +466,45 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  dialogContainer: {
+    backgroundColor: '#ffffff',
+    padding: 24,
+    margin: 20,
+    borderRadius: 16,
+    alignSelf: 'center',
+    width: '90%',
+    maxWidth: 400,
+  },
+  dialogTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginBottom: 12,
+  },
+  dialogSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  dialogErrorText: {
+    color: '#d20d0dff',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  dialogInput: {
+    marginBottom: 16,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  dialogButton: {
+    flex: 1,
+    borderRadius: 24,
+  },
+  dialogSubmitBtn: {},
 });
 
 export default LoginScreen;
