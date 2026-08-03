@@ -928,7 +928,12 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     const fetchTemplates = async () => {
       const data = await getAllTemplates(incomingCategory, subCategory);
       console.log(data);
-      setTemplates(data?.templates || []);
+      const fetchedTemplates = data?.templates || [];
+      const sortedTemplates = [...fetchedTemplates].sort((a, b) => {
+        if (a.is_paid === b.is_paid) return 0;
+        return a.is_paid ? 1 : -1;
+      });
+      setTemplates(sortedTemplates);
     };
     fetchTemplates();
   }, [incomingCategory, subCategory]);
