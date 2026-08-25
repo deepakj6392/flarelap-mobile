@@ -1,10 +1,12 @@
 import React, {useEffect} from 'react';
 import { StyleSheet, StatusBar } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Logo from '../components/Logo';
 import { getTokens, clearTokens, saveTokens } from '../services/token.service';
 import { refreshToken } from '../services/auth.service';
 import { setAuthToken } from '../services/api.service';
+import { ONBOARDING_KEY } from './OnboardingScreen';
 
 function SplashScreen({navigation}: any) {
   useEffect(() => {
@@ -12,11 +14,21 @@ function SplashScreen({navigation}: any) {
 
     async function check() {
       try {
+        // Check if onboarding has been completed before
+        const onboardingDone = await AsyncStorage.getItem(ONBOARDING_KEY);
+        if (!onboardingDone) {
+          // First launch — show onboarding
+          if (mounted) {
+            navigation.replace('Onboarding');
+          }
+          return;
+        }
+
         const tokens = await getTokens();
-  // debug: log tokens to help identify storage issues
-  console.log('Splash tokens:', tokens);
-  const accessToken = (tokens as any).accessToken || (tokens as any).access_token || (tokens as any).token || null;
-  const rToken = (tokens as any).refreshToken || (tokens as any).refresh_token || null;
+        // debug: log tokens to help identify storage issues
+        console.log('Splash tokens:', tokens);
+        const accessToken = (tokens as any).accessToken || (tokens as any).access_token || (tokens as any).token || null;
+        const rToken = (tokens as any).refreshToken || (tokens as any).refresh_token || null;
         if (accessToken && accessToken !== 'null') {
           // ensure axios default header is set (token may have been loaded from storage)
           setAuthToken(accessToken);

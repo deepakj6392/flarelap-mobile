@@ -24,6 +24,7 @@ import Svg, {
   Image as SvgImage,
   Path,
   Circle,
+  Rect,
 } from 'react-native-svg';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
@@ -183,6 +184,9 @@ interface HistoryState {
   cropRect: { x: number; y: number; width: number; height: number };
   strokes: string[];
   overlays: OverlayItem[];
+  bgColor: string;
+  bgOverlayImage: string | null;
+  bgOverlayOpacity: number;
 }
 
 // --- Custom Slider ---
@@ -407,8 +411,33 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
 
   // Core Canvas State
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'select' | 'filters' | 'adjust' | 'transform' | 'draw' | 'overlays'>('select');
+  const [activeTab, setActiveTab] = useState<'select' | 'filters' | 'adjust' | 'transform' | 'draw' | 'overlays' | 'background'>('select');
   const [isRemovingBg, setIsRemovingBg] = useState(false);
+
+  // Background color & overlay states
+  const [bgColor, setBgColor] = useState<string>('transparent');
+  const [bgOverlayImage, setBgOverlayImage] = useState<string | null>(null);
+  const [bgOverlayOpacity, setBgOverlayOpacity] = useState<number>(0.5);
+
+  // Preset background color palette (18 swatches)
+  const BG_COLORS = [
+    'transparent',
+    '#FFFFFF', '#F8FAFC', '#0F172A', '#000000',
+    '#EF4444', '#F97316', '#F59E0B', '#10B981',
+    '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6',
+    '#EC4899', '#F43F5E', '#84CC16', '#14B8A6',
+    '#FBBF24',
+  ];
+
+  // Overlay blend mode options
+  const OVERLAY_IMAGES = [
+    { label: 'Bokeh', url: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
+    { label: 'Neon', url: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800' },
+    { label: 'Marble', url: 'https://images.unsplash.com/photo-1557683311-eac922347aa1?w=800' },
+    { label: 'Sunset', url: 'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?w=800' },
+    { label: 'Forest', url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=800' },
+    { label: 'City', url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800' },
+  ];
 
   // Adjustments States
   const [brightness, setBrightness] = useState(1.0);
@@ -466,6 +495,9 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       cropRect: currentState?.cropRect ?? cropRect,
       strokes: currentState?.strokes ?? strokes,
       overlays: currentState?.overlays ?? overlays,
+      bgColor: currentState?.bgColor ?? bgColor,
+      bgOverlayImage: currentState?.bgOverlayImage !== undefined ? currentState.bgOverlayImage : bgOverlayImage,
+      bgOverlayOpacity: currentState?.bgOverlayOpacity ?? bgOverlayOpacity,
     };
 
     const updatedHistory = history.slice(0, historyIndex + 1);
@@ -491,6 +523,9 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
       setStrokes(state.strokes);
       setOverlays(state.overlays);
+      setBgColor(state.bgColor ?? 'transparent');
+      setBgOverlayImage(state.bgOverlayImage ?? null);
+      setBgOverlayOpacity(state.bgOverlayOpacity ?? 0.5);
       setHistoryIndex(prevIndex);
       setSelectedOverlay(null);
     } else if (historyIndex === 0) {
@@ -508,6 +543,9 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
       setStrokes([]);
       setOverlays([]);
+      setBgColor('transparent');
+      setBgOverlayImage(null);
+      setBgOverlayOpacity(0.5);
       setHistoryIndex(-1);
       setSelectedOverlay(null);
     }
@@ -530,6 +568,9 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
       setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
       setStrokes(state.strokes);
       setOverlays(state.overlays);
+      setBgColor(state.bgColor ?? 'transparent');
+      setBgOverlayImage(state.bgOverlayImage ?? null);
+      setBgOverlayOpacity(state.bgOverlayOpacity ?? 0.5);
       setHistoryIndex(nextIndex);
       setSelectedOverlay(null);
     }
@@ -611,6 +652,9 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
     setPendingCrop({ x: 0, y: 0, width: 400, height: 400 });
     setStrokes([]);
     setOverlays([]);
+    setBgColor('transparent');
+    setBgOverlayImage(null);
+    setBgOverlayOpacity(0.5);
     setHistory([]);
     setHistoryIndex(-1);
     setSelectedOverlay(null);
@@ -1523,6 +1567,17 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                     </Filter>
                   </Defs>
 
+                  {/* Background solid color rect — rendered first so it sits behind the photo */}
+                  {bgColor !== 'transparent' && (
+                    <Rect
+                      x="0"
+                      y="0"
+                      width="400"
+                      height="400"
+                      fill={bgColor}
+                    />
+                  )}
+
                   {/* Backing Image element */}
                   <SvgImage
                     x="0"
@@ -1538,6 +1593,23 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                   {renderStrokes()}
                 </Svg>
               </TouchableOpacity>
+
+              {/* Background image overlay (above image, below movable overlays) */}
+              {bgOverlayImage && (
+                <View
+                  style={[
+                    StyleSheet.absoluteFillObject,
+                    { opacity: bgOverlayOpacity },
+                  ]}
+                  pointerEvents="none"
+                >
+                  <RNImage
+                    source={{ uri: bgOverlayImage }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                  />
+                </View>
+              )}
 
               {/* Movable Overlays (Text / Stickers) */}
               <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
@@ -1938,6 +2010,99 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
                   </ScrollView>
                 </View>
               )}
+
+              {/* --- 7. BACKGROUND TAB --- */}
+              {activeTab === 'background' && (
+                <View style={styles.panelContent}>
+                  <Text style={styles.panelTitle}>Background Color</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bgColorsScroll}>
+                    {BG_COLORS.map((c) => (
+                      <TouchableOpacity
+                        key={c}
+                        style={[
+                          styles.bgColorSwatch,
+                          { backgroundColor: c === 'transparent' ? undefined : c },
+                          c === 'transparent' && styles.bgSwatchTransparent,
+                          bgColor === c && styles.bgSwatchActive,
+                        ]}
+                        onPress={() => {
+                          setBgColor(c);
+                          commitHistory({ bgColor: c });
+                        }}
+                      >
+                        {c === 'transparent' && (
+                          <Text style={styles.bgSwatchTransparentText}>∅</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  <Text style={[styles.panelTitle, { marginTop: 14, marginBottom: 6 }]}>Image Overlay</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bgOverlayScroll}>
+                    {/* None option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.bgOverlayCard,
+                        !bgOverlayImage && styles.bgOverlayCardActive,
+                        { justifyContent: 'center', alignItems: 'center', backgroundColor: '#1E293B' },
+                      ]}
+                      onPress={() => {
+                        setBgOverlayImage(null);
+                        commitHistory({ bgOverlayImage: null });
+                      }}
+                    >
+                      <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: '700' }}>None</Text>
+                    </TouchableOpacity>
+
+                    {/* Custom from gallery */}
+                    <TouchableOpacity
+                      style={[styles.bgOverlayCard, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#1E293B', borderStyle: 'dashed' }]}
+                      onPress={async () => {
+                        const res = await launchImageLibrary({ mediaType: 'photo', quality: 1 });
+                        if (res.assets && res.assets[0]?.uri) {
+                          const uri = res.assets[0].uri;
+                          setBgOverlayImage(uri);
+                          commitHistory({ bgOverlayImage: uri });
+                        }
+                      }}
+                    >
+                      <ImageIcon size={18} color="#94A3B8" />
+                      <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '600', marginTop: 4 }}>Gallery</Text>
+                    </TouchableOpacity>
+
+                    {/* Preset overlay images */}
+                    {OVERLAY_IMAGES.map((ov) => (
+                      <TouchableOpacity
+                        key={ov.label}
+                        style={[styles.bgOverlayCard, bgOverlayImage === ov.url && styles.bgOverlayCardActive]}
+                        onPress={() => {
+                          setBgOverlayImage(ov.url);
+                          commitHistory({ bgOverlayImage: ov.url });
+                        }}
+                      >
+                        <RNImage source={{ uri: ov.url }} style={styles.bgOverlayThumb} />
+                        <Text style={styles.bgOverlayLabel}>{ov.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  {/* Opacity slider — only show if an overlay is selected */}
+                  {bgOverlayImage && (
+                    <CustomSlider
+                      label="Overlay Opacity"
+                      min={0.05}
+                      max={1.0}
+                      step={0.05}
+                      suffix=""
+                      value={bgOverlayOpacity}
+                      onChange={(v) => {
+                        setBgOverlayOpacity(v);
+                        commitHistory({ bgOverlayOpacity: v });
+                      }}
+                    />
+                  )}
+                </View>
+              )}
             </View>
 
             {/* Bottom Primary Tab Strip */}
@@ -2006,6 +2171,17 @@ export default function PhotoEditor({ route, navigation }: { route?: any; naviga
               >
                 <TextIcon size={18} color={activeTab === 'overlays' ? '#df103f' : '#94A3B8'} />
                 <Text style={[styles.tabLabel, activeTab === 'overlays' && styles.tabLabelActive]}>Overlays</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.tabItem, activeTab === 'background' && styles.tabItemActive]}
+                onPress={() => {
+                  setDrawingMode(false);
+                  setActiveTab('background');
+                }}
+              >
+                <BrushIcon size={18} color={activeTab === 'background' ? '#df103f' : '#94A3B8'} />
+                <Text style={[styles.tabLabel, activeTab === 'background' && styles.tabLabelActive]}>BG</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2276,6 +2452,50 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   emojiText: { fontSize: 22 },
+
+  // Background tab styles
+  bgColorsScroll: { paddingVertical: 4, paddingHorizontal: 6, gap: 8 },
+  bgColorSwatch: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  bgSwatchTransparent: {
+    borderStyle: 'dashed',
+    borderColor: '#64748B',
+    backgroundColor: '#1E293B',
+  },
+  bgSwatchActive: {
+    borderColor: '#df103f',
+    borderWidth: 2.5,
+    transform: [{ scale: 1.15 }],
+  },
+  bgSwatchTransparentText: { color: '#64748B', fontSize: 16, fontWeight: '700' },
+  bgOverlayScroll: { paddingVertical: 4, paddingHorizontal: 6, gap: 8 },
+  bgOverlayCard: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginRight: 8,
+    borderWidth: 2,
+    borderColor: '#334155',
+  },
+  bgOverlayCardActive: { borderColor: '#df103f', borderWidth: 2.5 },
+  bgOverlayThumb: { width: '100%', height: 54, resizeMode: 'cover' },
+  bgOverlayLabel: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingVertical: 2,
+    backgroundColor: '#0F172A',
+  },
 
   // Tab Strip
   tabStrip: {

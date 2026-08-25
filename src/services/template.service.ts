@@ -3,9 +3,14 @@ import RNFS from 'react-native-fs';
 import { API_ROUTES } from "../constants/routes";
 import api from "./api.service";
 
-export const getAllTemplates = async (category: string, subCategory: string | null = null) => {
+export const getAllTemplates = async (
+    category: string,
+    subCategory: string | null = null,
+    limit?: number,
+    skip?: number,
+) => {
     const response = await api.get(API_ROUTES.TEMPLATES, {
-        params: { category, subCategory }
+        params: { category, subCategory, ...(limit !== undefined && { limit }), ...(skip !== undefined && { skip }) }
     });
     return response.data;
 };

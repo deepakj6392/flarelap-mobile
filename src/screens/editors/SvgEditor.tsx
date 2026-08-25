@@ -442,7 +442,7 @@ const mapFabricObjectsToItems = async (
         strokeColor: stroke,
         strokeWidth,
         pathD,
-        pathViewBox: `${x} ${y} ${scaledW} ${scaledH}`,
+        pathViewBox: `0 0 ${scaledW} ${scaledH}`,
         opacity,
         strokeDasharray: Array.isArray(obj.strokeDashArray) ? obj.strokeDashArray.join(' ') : undefined,
       });
@@ -874,6 +874,10 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
   const [bgColor, setBgColor] = useState('#FFFFFF');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [subCategory, setSubCategory] = useState<string | null>(null);
+  const [templatePage, setTemplatePage] = useState(0);
+  const [templateHasMore, setTemplateHasMore] = useState(true);
+  const [templateLoadingMore, setTemplateLoadingMore] = useState(false);
+  const TEMPLATES_PAGE_SIZE = 20;
   const [showSocialModal, setShowSocialModal] = useState(false);
   const [canvasMetrics, setCanvasMetrics] = useState<CanvasMetrics>(DEFAULT_CANVAS_METRICS);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -924,19 +928,50 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
   // derive incoming category from prop or route param
   const incomingCategory = category ?? route?.params?.category;
 
+  // Reset and reload templates whenever category or subCategory changes
   useEffect(() => {
+    setTemplates([]);
+    setTemplatePage(0);
+    setTemplateHasMore(true);
     const fetchTemplates = async () => {
-      const data = await getAllTemplates(incomingCategory, subCategory);
-      console.log(data);
-      const fetchedTemplates = data?.templates || [];
-      const sortedTemplates = [...fetchedTemplates].sort((a, b) => {
+      try {
+        const data = await getAllTemplates(incomingCategory, subCategory, TEMPLATES_PAGE_SIZE, 0);
+        const fetchedTemplates: Template[] = data?.templates || [];
+        const sortedTemplates = [...fetchedTemplates].sort((a: Template, b: Template) => {
+          if (a.is_paid === b.is_paid) return 0;
+          return a.is_paid ? 1 : -1;
+        });
+        setTemplates(sortedTemplates);
+        setTemplatePage(1);
+        setTemplateHasMore(fetchedTemplates.length >= TEMPLATES_PAGE_SIZE);
+      } catch (err) {
+        console.warn('Failed to load templates:', err);
+      }
+    };
+    fetchTemplates();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingCategory, subCategory]);
+
+  // Load the next page of templates (called when user scrolls to end)
+  const loadMoreTemplates = async () => {
+    if (!templateHasMore || templateLoadingMore) return;
+    setTemplateLoadingMore(true);
+    try {
+      const data = await getAllTemplates(incomingCategory, subCategory, TEMPLATES_PAGE_SIZE, templatePage * TEMPLATES_PAGE_SIZE);
+      const fetchedTemplates: Template[] = data?.templates || [];
+      const sortedNew = [...fetchedTemplates].sort((a: Template, b: Template) => {
         if (a.is_paid === b.is_paid) return 0;
         return a.is_paid ? 1 : -1;
       });
-      setTemplates(sortedTemplates);
-    };
-    fetchTemplates();
-  }, [incomingCategory, subCategory]);
+      setTemplates(prev => [...prev, ...sortedNew]);
+      setTemplatePage(prev => prev + 1);
+      setTemplateHasMore(fetchedTemplates.length >= TEMPLATES_PAGE_SIZE);
+    } catch (err) {
+      console.warn('Failed to load more templates:', err);
+    } finally {
+      setTemplateLoadingMore(false);
+    }
+  };
 
   // Auto-open social subcategory modal when incoming category is 'Social Media'
   useEffect(() => {
@@ -1268,58 +1303,46 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
       try {
         // Call the Fabric.js conversion API
         const { fabricJSON } = await svgUrlToFabricJSON(tmpl.svg_url);
-        console.log("fabricJSON", fabricJSON, tmpl.svg_url);
-        // Derive canvas dimensions from the Fabric objects bounding box
+
+        // Derive canvas dimensions from the Fabric objects bounding box.
+        // We do NOT rescale the objects here — we let canvasMetrics + canvasScaleX/Y
+        // (computed in the render phase) handle fitting to the screen.
         let minX = Infinity;
         let minY = Infinity;
         let maxX = -Infinity;
         let maxY = -Infinity;
 
         for (const obj of fabricJSON.objects) {
-          const scaleX = obj.scaleX ?? 1;
-          const scaleY = obj.scaleY ?? 1;
-          const w = (obj.width ?? 0) * scaleX;
-          const h = (obj.height ?? 0) * scaleY;
+          const sX = obj.scaleX ?? 1;
+          const sY = obj.scaleY ?? 1;
+          const w = (obj.width ?? 0) * sX;
+          const h = (obj.height ?? 0) * sY;
           const isCenterOrigin = (obj.originX ?? 'left') === 'center';
           const left = isCenterOrigin ? (obj.left ?? 0) - w / 2 : (obj.left ?? 0);
-          const top = isCenterOrigin ? (obj.top ?? 0) - h / 2 : (obj.top ?? 0);
+          const top  = isCenterOrigin ? (obj.top  ?? 0) - h / 2 : (obj.top  ?? 0);
 
-          if (left < minX) minX = left;
-          if (top < minY) minY = top;
+          if (left     < minX) minX = left;
+          if (top      < minY) minY = top;
           if (left + w > maxX) maxX = left + w;
-          if (top + h > maxY) maxY = top + h;
+          if (top  + h > maxY) maxY = top  + h;
         }
 
-        const contentWidth = Number.isFinite(maxX) && Number.isFinite(minX) ? maxX - minX : 400;
-        const contentHeight = Number.isFinite(maxY) && Number.isFinite(minY) ? maxY - minY : 400;
-        const templateWidth = contentWidth;
-        const templateHeight = contentHeight;
+        const canvasWidth  = Number.isFinite(maxX) && Number.isFinite(minX) ? maxX - minX : 400;
+        const canvasHeight = Number.isFinite(maxY) && Number.isFinite(minY) ? maxY - minY : 400;
 
-        const targetWidth = windowWidth;
-        const targetHeight = templateWidth > 0 ? (templateHeight / templateWidth) * targetWidth : targetWidth;
-
-        if (templateWidth > 0 && templateHeight > 0) {
-          const sourceLeft = Number.isFinite(minX) ? minX : 0;
-          const sourceTop = Number.isFinite(minY) ? minY : 0;
-          const fitWidth = contentWidth > 0 ? contentWidth : templateWidth;
-          const fitHeight = contentHeight > 0 ? contentHeight : templateHeight;
-          const scaleX = targetWidth / fitWidth;
-          const scaleY = targetHeight / fitHeight;
-
+        // If objects have a non-zero origin offset, normalise positions so (0,0) is top-left.
+        const offsetX = Number.isFinite(minX) && minX !== 0 ? minX : 0;
+        const offsetY = Number.isFinite(minY) && minY !== 0 ? minY : 0;
+        if (offsetX !== 0 || offsetY !== 0) {
           fabricJSON.objects.forEach((obj: any) => {
-            const currentLeft = obj.left || 0;
-            const currentTop = obj.top || 0;
-
-            obj.left = (currentLeft - sourceLeft) * scaleX;
-            obj.top = (currentTop - sourceTop) * scaleY;
-            obj.scaleX = (obj.scaleX || 1) * scaleX;
-            obj.scaleY = (obj.scaleY || 1) * scaleY;
+            obj.left = (obj.left ?? 0) - offsetX;
+            obj.top  = (obj.top  ?? 0) - offsetY;
           });
         }
 
-        const svgMetrics: CanvasMetrics = { width: targetWidth, height: targetHeight, minX: 0, minY: 0 };
+        const svgMetrics: CanvasMetrics = { width: canvasWidth, height: canvasHeight, minX: 0, minY: 0 };
 
-        // Use the clean SVG URL (returned by API) as the background layer and cache base64 images
+        // Cache any inline base64 images from the SVG source
         const bgRes = await fetch(tmpl.svg_url);
         const rawSvgText = bgRes.ok ? await bgRes.text() : null;
         const { localFileMap } = await processSvgBase64Images(rawSvgText);
@@ -1605,17 +1628,31 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
             {activeTab === 'templates' && (
               <View style={styles.panelContent}>
                 <Text style={styles.panelHeading}>Choose Design Template</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templatesScroll}>
-                  <TouchableOpacity onPress={() => handleLoadTemplate(null)} style={[styles.templateCard, !activeTemplateId && items.length === 0 && styles.activeTemplateCard]}>
-                    <View style={[styles.templateCardPreview, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' }]}>
-                      <CanvasIcon size={28} color="#64748b" />
-                    </View>
-                    <Text style={styles.templateLabel}>Blank Canvas</Text>
-                  </TouchableOpacity>
-
-                  {templates.map((tmpl) => (
+                <FlatList
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.templatesScroll}
+                  data={templates}
+                  keyExtractor={(tmpl, index) => `${tmpl.id}_${index}`}
+                  onEndReached={loadMoreTemplates}
+                  onEndReachedThreshold={0.3}
+                  ListHeaderComponent={
+                    <TouchableOpacity onPress={() => handleLoadTemplate(null)} style={[styles.templateCard, !activeTemplateId && items.length === 0 && styles.activeTemplateCard]}>
+                      <View style={[styles.templateCardPreview, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' }]}>
+                        <CanvasIcon size={28} color="#64748b" />
+                      </View>
+                      <Text style={styles.templateLabel}>Blank Canvas</Text>
+                    </TouchableOpacity>
+                  }
+                  ListFooterComponent={
+                    templateLoadingMore ? (
+                      <View style={styles.templateLoadingMore}>
+                        <ActivityIndicator size="small" color="#df103f" />
+                      </View>
+                    ) : null
+                  }
+                  renderItem={({ item: tmpl }) => (
                     <TouchableOpacity
-                      key={tmpl.id}
                       onPress={() => handleLoadTemplate(tmpl)}
                       style={[styles.templateCard, activeTemplateId === tmpl.id && styles.activeTemplateCard]}
                     >
@@ -1631,8 +1668,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                         {tmpl.name}
                       </Text>
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                  )}
+                />
               </View>
             )}
 
@@ -2234,6 +2271,7 @@ const styles = StyleSheet.create({
 
   // Template Scroll gallery
   templatesScroll: { gap: 12, paddingVertical: 4 },
+  templateLoadingMore: { width: 56, justifyContent: 'center', alignItems: 'center', alignSelf: 'center' },
   templateCard: {
     width: 125,
     height: 125,

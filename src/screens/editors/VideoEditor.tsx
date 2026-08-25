@@ -38,7 +38,7 @@ import { Template } from '../../../types/template';
 import { Camera, useCameraDevice, useVideoOutput, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 
 // ─── Dimensions ────────────────────────────────────────────────────────────────
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const PREVIEW_W = screenWidth - 32;
 const PREVIEW_H = (PREVIEW_W * 9) / 16;
 
@@ -859,45 +859,8 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     setShowSocialModal(true);
   }, []);
 
-  // Cleanup pre-recording sound when custom camera is closed
-  useEffect(() => {
-    if (!customCameraVisible) {
-      if (preRecordSoundRef.current) {
-        try {
-          preRecordSoundRef.current.stop();
-          preRecordSoundRef.current.release();
-        } catch {}
-        preRecordSoundRef.current = null;
-      }
-      // Reset Sound category to Playback when camera closes
-      try {
-        const Sound = require('react-native-sound');
-        Sound.setCategory('Playback', true);
-      } catch (err) {
-        console.warn('Failed to reset Sound category', err);
-      }
-    }
-  }, [customCameraVisible]);
-
-  // Cleanup pre-recording sound when component unmounts
-  useEffect(() => {
-    return () => {
-      if (preRecordSoundRef.current) {
-        try {
-          preRecordSoundRef.current.stop();
-          preRecordSoundRef.current.release();
-        } catch {}
-        preRecordSoundRef.current = null;
-      }
-      // Reset Sound category to Playback on unmount
-      try {
-        const Sound = require('react-native-sound');
-        Sound.setCategory('Playback', true);
-      } catch (err) {
-        console.warn('Failed to reset Sound category on unmount', err);
-      }
-    };
-  }, []);
+  // No sound cleanup needed — pre-record music is handled by a react-native-video
+  // audioOnly component inside the camera modal, which self-manages its session.
 
   const checkCameraPermissions = async () => {
     try {
@@ -925,54 +888,19 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const startCameraRecording = async () => {
     if (!cameraRef.current) return;
     try {
-      setIsRecording(true);
+      setIsRecording(true);   // ← this also unpauses the hidden audioOnly Video
       setRecordDuration(0);
-      
+
       // Start recording timer
       recordingTimerRef.current = setInterval(() => {
         setRecordDuration(d => d + 1);
       }, 1000);
 
-      // Play pre-recording sound if selected
+      // Music playback is handled by the hidden <Video audioOnly> in the camera
+      // modal (paused={!isRecording}). Give it a brief moment to actually start
+      // before the camera begins capturing audio, so they're in sync.
       if (preRecordMusic) {
-        try {
-          // Release existing sound if any
-          if (preRecordSoundRef.current) {
-            try {
-              preRecordSoundRef.current.stop();
-              preRecordSoundRef.current.release();
-            } catch {}
-            preRecordSoundRef.current = null;
-          }
-
-          const Sound = require('react-native-sound');
-          // PlayAndRecord with mixWithOthers=true allows playing audio while recording video with audio
-          Sound.setCategory('PlayAndRecord', true);
-          
-          // Clean file:// prefix for react-native-sound
-          const soundUri = preRecordMusic.uri.startsWith('file://')
-            ? preRecordMusic.uri.replace('file://', '')
-            : preRecordMusic.uri;
-
-          await new Promise<void>((resolve) => {
-            const sound = new Sound(soundUri, '', (error: any) => {
-              if (error) {
-                console.warn('Failed to load pre-record sound', error);
-                resolve();
-              } else {
-                sound.setVolume(1.0);
-                sound.play((success: any) => {
-                  console.log('Sound playback finished', success);
-                });
-                preRecordSoundRef.current = sound;
-                // Wait a short delay (300ms) for audio buffering and play start before starting video recording
-                setTimeout(resolve, 300);
-              }
-            });
-          });
-        } catch (soundErr) {
-          console.warn('Sound playback error', soundErr);
-        }
+        await new Promise<void>(resolve => setTimeout(resolve, 250));
       }
 
       const recorder = await videoOutput.createRecorder({});
@@ -981,35 +909,14 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       await recorder.startRecording(
         async (filePath: string) => {
           clearInterval(recordingTimerRef.current);
-          setIsRecording(false);
-          
-          // Stop and release sound safely
-          if (preRecordSoundRef.current) {
-            const soundToRelease = preRecordSoundRef.current;
-            preRecordSoundRef.current = null;
-            try {
-              soundToRelease.stop(() => {
-                try {
-                  soundToRelease.release();
-                } catch (e) {
-                  console.warn('Failed to release sound', e);
-                }
-              });
-            } catch (err) {
-              try {
-                soundToRelease.release();
-              } catch (e) {
-                console.warn('Failed to release sound', e);
-              }
-            }
-          }
+          setIsRecording(false); // ← pauses the hidden audioOnly Video
 
           // Load the recorded video into editor
           if (filePath) {
             const videoUri = `file://${filePath}`;
             await loadVideoSource(videoUri, { autoplay: false, clearOverlays: true });
-            
-            // Automatically import the music track
+
+            // Automatically import the music track into the editor
             if (preRecordMusic) {
               const trackToAdd: MusicTrack = {
                 ...preRecordMusic,
@@ -1023,34 +930,13 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
               setVolume(0.1);
               commitHistory({ musicTracks: updated });
             }
-            
+
             setCustomCameraVisible(false);
           }
         },
         (error: any) => {
           clearInterval(recordingTimerRef.current);
           setIsRecording(false);
-          
-          // Stop and release sound safely
-          if (preRecordSoundRef.current) {
-            const soundToRelease = preRecordSoundRef.current;
-            preRecordSoundRef.current = null;
-            try {
-              soundToRelease.stop(() => {
-                try {
-                  soundToRelease.release();
-                } catch (e) {
-                  console.warn('Failed to release sound', e);
-                }
-              });
-            } catch (err) {
-              try {
-                soundToRelease.release();
-              } catch (e) {
-                console.warn('Failed to release sound', e);
-              }
-            }
-          }
           console.error('Camera recording error', error);
           Alert.alert('Recording Error', 'Failed to record video.');
         }
@@ -1058,27 +944,6 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     } catch (err: any) {
       clearInterval(recordingTimerRef.current);
       setIsRecording(false);
-      
-      // Stop and release sound safely
-      if (preRecordSoundRef.current) {
-        const soundToRelease = preRecordSoundRef.current;
-        preRecordSoundRef.current = null;
-        try {
-          soundToRelease.stop(() => {
-            try {
-              soundToRelease.release();
-            } catch (e) {
-              console.warn('Failed to release sound', e);
-            }
-          });
-        } catch (err) {
-          try {
-            soundToRelease.release();
-          } catch (e) {
-            console.warn('Failed to release sound', e);
-          }
-        }
-      }
       Alert.alert('Error', err.message || 'Could not start recording.');
     }
   };
@@ -1095,9 +960,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
   const handleOpenCustomCamera = async () => {
     const hasPermission = await checkCameraPermissions();
     if (hasPermission) {
-      // Automatically pre-populate preRecordMusic from the active editor music track if none is set
+      // Always sync the active editor music track → preRecordMusic so the
+      // camera plays it automatically when recording starts.
       const activeTrack = musicTracks.find(t => t.id === selectedMusicTrack);
-      if (activeTrack && !preRecordMusic) {
+      if (activeTrack) {
         setPreRecordMusic(activeTrack);
       }
       setCustomCameraVisible(true);
@@ -1792,37 +1658,44 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
             </View>
           ) : (
             /* Empty state */
-            <ScrollView contentContainerStyle={[styles.emptyCanvas, { width: PREVIEW_W, minHeight: PREVIEW_H, paddingVertical: 16 }]}>
-              <Icon.Video size={48} color="#334155" />
-              <Title style={styles.emptyTitle}>No Video Selected</Title>
-              <Text style={styles.emptySub}>Pick from gallery, record with camera, or use a template to start editing</Text>
+            <View style={{ width: PREVIEW_W, height: screenHeight * 0.72 }}>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={[styles.emptyCanvas, { paddingVertical: 16, paddingBottom: 16 }]}
+                showsVerticalScrollIndicator={false}
+              >
+                <Icon.Video size={48} color="#334155" />
+                <Title style={styles.emptyTitle}>No Video Selected</Title>
+                <Text style={styles.emptySub}>Pick from gallery, record with camera, or use a template to start editing</Text>
 
-              {/* Inline templates grid so users can pick templates without opening modal */}
-              <View style={styles.templatesRow}>
-                <Text style={styles.templateHeading}>Templates</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 6 }}>
-                  {VIDEOS_TEMPLATES.map(t => (
-                    <TouchableOpacity key={t.id} style={{ width: '48%', marginBottom: 10 }} onPress={() => selectTemplate(t)}>
-                      <View style={[styles.templateCard, { width: '100%', marginRight: 0 }]}>
-                        <View style={[styles.templateThumb, { width: '100%', height: 100, position: 'relative', overflow: 'hidden' }]}>
-                          {t.thumbnail ? (
-                            <RNImage
-                              source={getThumbnailSource(t.thumbnail)}
-                              style={StyleSheet.absoluteFillObject}
-                              resizeMode="cover"
-                            />
-                          ) : null}
-                          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.15)' }}>
-                            <Icon.Play size={16} color="#fff" />
+                {/* Inline templates grid so users can pick templates without opening modal */}
+                <View style={[styles.templatesRow, { alignSelf: 'stretch' }]}>
+                  <Text style={styles.templateHeading}>Templates</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 6 }}>
+                    {VIDEOS_TEMPLATES.map(t => (
+                      <TouchableOpacity key={t.id} style={{ width: '48%', marginBottom: 10 }} onPress={() => selectTemplate(t)}>
+                        <View style={[styles.templateCard, { width: '100%', marginRight: 0 }]}>
+                          <View style={[styles.templateThumb, { width: '100%', height: 100, position: 'relative', overflow: 'hidden' }]}>
+                            {t.thumbnail ? (
+                              <RNImage
+                                source={getThumbnailSource(t.thumbnail)}
+                                style={StyleSheet.absoluteFillObject}
+                                resizeMode="cover"
+                              />
+                            ) : null}
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.15)' }}>
+                              <Icon.Play size={16} color="#fff" />
+                            </View>
                           </View>
+                          <Text style={styles.templateTitle} numberOfLines={1}>{t.title}</Text>
                         </View>
-                        <Text style={styles.templateTitle} numberOfLines={1}>{t.title}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
+              </ScrollView>
 
+              {/* Fixed bottom action buttons */}
               <View style={styles.emptyActions}>
                 <TouchableOpacity style={styles.emptyBtn} onPress={pickVideo}>
                   <Icon.Video size={18} color="#fff" />
@@ -1837,7 +1710,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                   <Text style={styles.emptyBtnLabel}>Slideshow</Text>
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </View>
           )}
         </View>
 
@@ -2786,6 +2659,24 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                 outputs={[videoOutput]}
               />
 
+              {/* Hidden audio-only player for pre-record background music.
+                  Uses react-native-video (same as editor tracks) so it properly
+                  shares the AVAudioSession with the camera — no earpiece routing
+                  issues and no mic interference. Starts/stops with isRecording. */}
+              {preRecordMusic && (
+                <Video
+                  {...({
+                    key: `prerecord_${preRecordMusic.id}`,
+                    source: { uri: preRecordMusic.uri },
+                    audioOnly: true,
+                    paused: !isRecording,
+                    volume: 1.0,
+                    repeat: true,
+                    mixWithOthers: true,
+                  } as any)}
+                />
+              )}
+
               {/* HUD Header */}
               <SafeAreaView style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16, paddingTop: 10, flexDirection: 'row', justifyContent: 'space-between', zIndex: 10 }}>
                 <TouchableOpacity
@@ -2826,31 +2717,66 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                 )}
 
                 {/* Music Banner */}
-                <View style={{ width: '100%', marginBottom: 20, alignItems: 'center' }}>
+                <View style={{ width: '100%', marginBottom: 20, alignItems: 'center', gap: 10 }}>
                   {preRecordMusic ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
-                      <RNText style={{ fontSize: 16 }}>🎵</RNText>
-                      <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 12, fontWeight: '700', maxWidth: 200 }}>
-                        {preRecordMusic.name}
-                      </RNText>
-                      {!isRecording && (
-                        <TouchableOpacity onPress={() => setPreRecordMusic(null)}>
-                          <RNText style={{ color: '#EF4444', fontSize: 12, fontWeight: 'bold', marginLeft: 4 }}>×</RNText>
-                        </TouchableOpacity>
+                    <View style={{ alignItems: 'center', gap: 6, width: '100%' }}>
+                      {/* Selected track pill */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, gap: 8, borderWidth: 1, borderColor: isRecording ? '#10B981' : 'rgba(255,255,255,0.1)' }}>
+                        <RNText style={{ fontSize: 16 }}>{isRecording ? '▶' : '🎵'}</RNText>
+                        <RNText numberOfLines={1} style={{ color: isRecording ? '#10B981' : '#fff', fontSize: 12, fontWeight: '700', maxWidth: 180 }}>
+                          {preRecordMusic.name}
+                        </RNText>
+                        {isRecording ? (
+                          <RNText style={{ color: '#10B981', fontSize: 11, fontWeight: '600' }}>Playing</RNText>
+                        ) : (
+                          <TouchableOpacity onPress={() => setPreRecordMusic(null)}>
+                            <RNText style={{ color: '#EF4444', fontSize: 14, fontWeight: 'bold' }}>×</RNText>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      {/* Quick-switch: editor tracks */}
+                      {!isRecording && musicTracks.length > 0 && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 4 }}>
+                          {musicTracks.map(t => (
+                            <TouchableOpacity
+                              key={t.id}
+                              onPress={() => setPreRecordMusic(t)}
+                              style={{ backgroundColor: preRecordMusic?.id === t.id ? '#df103f' : 'rgba(30,41,59,0.85)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: preRecordMusic?.id === t.id ? '#df103f' : 'rgba(255,255,255,0.15)' }}
+                            >
+                              <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 11, fontWeight: '600', maxWidth: 120 }}>🎵 {t.name}</RNText>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
                       )}
                     </View>
                   ) : (
-                    <TouchableOpacity
-                      disabled={isRecording}
-                      onPress={() => {
-                        setMusicSelectMode('pre-record');
-                        setITunesModalVisible(true);
-                      }}
-                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }}
-                    >
-                      <Icon.Music size={12} color="#fff" />
-                      <RNText style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Choose Song to Dance & Record</RNText>
-                    </TouchableOpacity>
+                    <View style={{ alignItems: 'center', gap: 8 }}>
+                      {/* Quick-pick from editor tracks */}
+                      {musicTracks.length > 0 && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 4 }}>
+                          {musicTracks.map(t => (
+                            <TouchableOpacity
+                              key={t.id}
+                              onPress={() => setPreRecordMusic(t)}
+                              style={{ backgroundColor: 'rgba(30,41,59,0.85)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }}
+                            >
+                              <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 11, fontWeight: '600', maxWidth: 120 }}>🎵 {t.name}</RNText>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      )}
+                      <TouchableOpacity
+                        disabled={isRecording}
+                        onPress={() => {
+                          setMusicSelectMode('pre-record');
+                          setITunesModalVisible(true);
+                        }}
+                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }}
+                      >
+                        <Icon.Music size={12} color="#fff" />
+                        <RNText style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Choose Song to Dance & Record</RNText>
+                      </TouchableOpacity>
+                    </View>
                   )}
                 </View>
 
@@ -2922,8 +2848,16 @@ const styles = StyleSheet.create({
   emptyCanvas: { backgroundColor: '#0F172A', borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#1E293B', borderStyle: 'dashed' },
   emptyTitle: { color: '#475569', fontSize: 16, marginTop: 10 },
   emptySub: { color: '#334155', fontSize: 12, textAlign: 'center', paddingHorizontal: 20, marginTop: 4 },
-  emptyActions: { flexDirection: 'row', marginTop: 16, gap: 12 },
-  emptyBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E3A5F', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, gap: 6 },
+  emptyActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#0F172A',
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+  },
+  emptyBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E3A5F', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, gap: 6 },
   emptyBtnLabel: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Playback
