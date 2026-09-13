@@ -1,4 +1,4 @@
-import Svg, { SvgXml, Rect, Circle, Polygon, Line, Path } from 'react-native-svg';
+import Svg, { Rect, Circle, Polygon, Line, Path } from 'react-native-svg';
 
 const UndoIcon = ({ size = 20, color = '#334155' }) => (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -141,4 +141,91 @@ const SearchIcon = ({ size = 20, color = '#334155' }) => (
     </Svg>
 );
 
-export { UndoIcon, RedoIcon, PlusIcon, TextIcon, ShapeIcon, ImageIcon, LayersIcon, CanvasIcon, TemplateIcon, ChevronUpIcon, ChevronDownIcon, CloseIcon, DownloadIcon, RotateIcon, TrashIcon, BoldIcon, ItalicIcon, ArrowLeftIcon, EyeIcon, EyeOffIcon, PasswordEyeIcon, SearchIcon };
+const ShareIcon = ({ size = 20, color = '#334155' }: { size?: number; color?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="18" cy="5" r="3" />
+        <Circle cx="6" cy="12" r="3" />
+        <Circle cx="18" cy="19" r="3" />
+        <Line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+        <Line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+    </Svg>
+);
+
+const CheckIcon = ({ size = 20, color = '#334155' }: { size?: number; color?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M20 6L9 17l-5-5" />
+    </Svg>
+);
+
+const CopyIcon = ({ size = 20, color = '#334155' }: { size?: number; color?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+        <Path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </Svg>
+);
+
+const StarIcon = ({ size = 20, color = '#334155', fill = 'none' }: { size?: number; color?: string; fill?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </Svg>
+);
+
+const CrownIcon = ({ size = 20, color = '#f59e0b', fill = 'none' }: { size?: number; color?: string; fill?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M2 4l3 12h14l3-12-5 4-5-6-5 6-5-4z" />
+        <Path d="M4 18h16v2H4z" />
+    </Svg>
+);
+
+const CodeIcon = ({ size = 20, color = '#334155' }: { size?: number; color?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+    </Svg>
+);
+
+const FlashIcon = ({ size = 20, color = '#334155' }: { size?: number; color?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </Svg>
+);
+
+const MusicIcon = ({ size = 20, color = '#334155' }: { size?: number; color?: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M9 18V5l12-2v13" />
+        <Circle cx="6" cy="18" r="3" />
+        <Circle cx="18" cy="16" r="3" />
+    </Svg>
+);
+
+export {
+    UndoIcon,
+    RedoIcon,
+    PlusIcon,
+    TextIcon,
+    ShapeIcon,
+    ImageIcon,
+    LayersIcon,
+    CanvasIcon,
+    TemplateIcon,
+    ChevronUpIcon,
+    ChevronDownIcon,
+    CloseIcon,
+    DownloadIcon,
+    RotateIcon,
+    TrashIcon,
+    BoldIcon,
+    ItalicIcon,
+    ArrowLeftIcon,
+    EyeIcon,
+    EyeOffIcon,
+    PasswordEyeIcon,
+    SearchIcon,
+    ShareIcon,
+    CheckIcon,
+    CopyIcon,
+    StarIcon,
+    CrownIcon,
+    CodeIcon,
+    FlashIcon,
+    MusicIcon,
+};

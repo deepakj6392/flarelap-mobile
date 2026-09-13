@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Portal, Modal, Text, Button } from 'react-native-paper';
 import { THEME_COLORS } from '../../constants';
+import { CrownIcon, CheckIcon } from '../icons-svg';
 
 interface PaidSubscriptionDialogProps {
   visible: boolean;
@@ -24,7 +25,7 @@ export default function PaidSubscriptionDialog({
         contentContainerStyle={styles.container}
       >
         <View style={styles.header}>
-          <Text style={styles.crownIcon}>👑</Text>
+          <CrownIcon size={24} color="#f59e0b" fill="#f59e0b" />
           <Text style={styles.title}>Premium Template</Text>
         </View>
 
@@ -38,9 +39,18 @@ export default function PaidSubscriptionDialog({
 
         <View style={styles.featuresList}>
           <Text style={styles.featuresHeading}>What you get:</Text>
-          <Text style={styles.featureItem}>✨ Premium templates & styling options</Text>
-          <Text style={styles.featureItem}>✨ Faster workflow + export-ready designs</Text>
-          <Text style={styles.featureItem}>✨ Cancel anytime (as per our subscription policy)</Text>
+          <View style={styles.featureItemRow}>
+            <CheckIcon size={16} color="#10b981" />
+            <Text style={styles.featureItem}>Premium templates & styling options</Text>
+          </View>
+          <View style={styles.featureItemRow}>
+            <CheckIcon size={16} color="#10b981" />
+            <Text style={styles.featureItem}>Faster workflow + export-ready designs</Text>
+          </View>
+          <View style={styles.featureItemRow}>
+            <CheckIcon size={16} color="#10b981" />
+            <Text style={styles.featureItem}>Cancel anytime (as per our subscription policy)</Text>
+          </View>
         </View>
 
         <View style={styles.actions}>
@@ -121,11 +131,17 @@ const styles = StyleSheet.create({
     color: '#334155',
     marginBottom: 8,
   },
+  featureItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   featureItem: {
-    fontSize: 12,
-    color: '#475569',
-    marginBottom: 6,
-    lineHeight: 16,
+    fontSize: 13,
+    color: '#334155',
+    lineHeight: 18,
+    flex: 1,
   },
   actions: {
     flexDirection: 'row',

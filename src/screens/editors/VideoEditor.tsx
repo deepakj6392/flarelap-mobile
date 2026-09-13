@@ -17,6 +17,7 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  PermissionsAndroid,
   StatusBar,
   Modal,
   ActivityIndicator,
@@ -235,6 +236,13 @@ const Icon = {
       <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
       <Circle cx="8.5" cy="8.5" r="1.5" fill={color} stroke="none" />
       <Path d="M21 15l-5-5L5 21" />
+    </Svg>
+  ),
+  Smile: ({ size = 20, color = '#94A3B8' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <Path d="M9 9h.01M15 9h.01" />
     </Svg>
   ),
   Music: ({ size = 20, color = '#94A3B8' }) => (
@@ -846,7 +854,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       
       setSlideshowModalVisible(false);
       setSlideshowImages([]);
-      Alert.alert('Success 🎉', 'Slideshow video generated successfully and loaded into editor!');
+      Alert.alert('Success', 'Slideshow video generated successfully and loaded into editor!');
     } catch (err: any) {
       console.error('Slideshow Generation Error:', err);
       Alert.alert('Generation Failed', err.message || 'Something went wrong. Please try again.');
@@ -1298,6 +1306,77 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
     return `file://${filePath}`;
   };
 
+  const saveVideoToDevice = async (
+    videoSourcePath: string
+  ): Promise<{ success: boolean; path: string; location: string; filename: string }> => {
+    const RNFS = (() => {
+      try {
+        return require('react-native-fs');
+      } catch {
+        return null;
+      }
+    })();
+    if (!RNFS) {
+      throw new Error('FileSystem storage not available.');
+    }
+
+    const cleanSrc = videoSourcePath.replace('file://', '');
+    const filename = `flarelap_video_${Date.now()}.mp4`;
+
+    if (Platform.OS === 'android') {
+      if (Platform.Version < 29) {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+            {
+              title: 'Storage Permission',
+              message: 'Flarelap needs storage access to save videos to your Gallery.',
+              buttonPositive: 'OK',
+            }
+          );
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            console.warn('Storage permission not granted on Android <= 9');
+          }
+        } catch (permErr) {
+          console.warn('Permission request error:', permErr);
+        }
+      }
+
+      let destPath = `${RNFS.DownloadDirectoryPath}/${filename}`;
+      let location = 'Downloads / Gallery';
+
+      try {
+        await RNFS.copyFile(cleanSrc, destPath);
+      } catch (err1) {
+        console.warn('Saving to DownloadDirectoryPath failed, trying PicturesDirectoryPath:', err1);
+        try {
+          destPath = `${RNFS.PicturesDirectoryPath}/${filename}`;
+          await RNFS.copyFile(cleanSrc, destPath);
+          location = 'Pictures / Gallery';
+        } catch (err2) {
+          console.warn('Saving to PicturesDirectoryPath failed, falling back to DocumentDirectoryPath:', err2);
+          destPath = `${RNFS.DocumentDirectoryPath}/${filename}`;
+          await RNFS.copyFile(cleanSrc, destPath);
+          location = 'Documents';
+        }
+      }
+
+      if (RNFS.scanFile) {
+        try {
+          await RNFS.scanFile(destPath);
+        } catch (scanErr) {
+          console.warn('MediaScanner scanFile error:', scanErr);
+        }
+      }
+
+      return { success: true, path: destPath, location, filename };
+    } else {
+      const destPath = `${RNFS.DocumentDirectoryPath}/${filename}`;
+      await RNFS.copyFile(cleanSrc, destPath);
+      return { success: true, path: destPath, location: 'Files', filename };
+    }
+  };
+
   const handleExport = async () => {
     if (!videoUri) { Alert.alert('No Video', 'Please select or record a video first.'); return; }
     setExporting(true);
@@ -1460,21 +1539,21 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
         processedVideoUri = finalVideoUri;
       }
 
-      // Copy the final file to a permanent path in the Documents folder
-      const RNFS = require('react-native-fs');
-      const finalFileName = `flarelap_export_${Date.now()}.mp4`;
-      const finalDestPath = `${RNFS.DocumentDirectoryPath || RNFS.CachesDirectoryPath}/${finalFileName}`;
-      await RNFS.copyFile(processedVideoUri.replace('file://', ''), finalDestPath);
+      // Save final video to device (public storage & MediaScanner on Android)
+      const savedResult = await saveVideoToDevice(processedVideoUri);
 
       const handleShareVideo = async () => {
         try {
           await Share.open({
-            url: `file://${finalDestPath}`,
+            url: `file://${savedResult.path}`,
             type: 'video/mp4',
+            title: 'Share Video',
           });
         } catch (shareErr: any) {
           console.warn('Share video failed', shareErr);
-          const isCancel = shareErr?.message?.toLowerCase().includes('cancel') || shareErr?.toString().toLowerCase().includes('cancel');
+          const isCancel =
+            shareErr?.message?.toLowerCase().includes('cancel') ||
+            shareErr?.toString().toLowerCase().includes('cancel');
           if (!isCancel) {
             Alert.alert('Share Failed', 'Could not share the video.');
           }
@@ -1482,11 +1561,11 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
       };
 
       Alert.alert(
-        'Export Successful! 🎉',
-        `Your video is saved at:\nDocuments/${finalFileName}`,
+        'Video Saved',
+        `Your video has been saved to your device (${savedResult.location}):\n\n${savedResult.filename}`,
         [
           { text: 'Share Video', onPress: handleShareVideo },
-          { text: 'OK', style: 'cancel' }
+          { text: 'Done', style: 'default' },
         ],
       );
     } catch (err: any) {
@@ -1874,7 +1953,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                             }}
                           >
                             <RNText numberOfLines={1} style={tl.blockText}>
-                              🎵 {track.name} ({(track.volume * 100).toFixed(0)}%)
+                              {track.name} ({(track.volume * 100).toFixed(0)}%)
                             </RNText>
                           </TouchableOpacity>
                         );
@@ -2029,7 +2108,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                       <Text style={[styles.srcBtnLabel, { color: '#F8FAFC', fontSize: 13 }]}>Add Image</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.srcBtn, { backgroundColor: '#1E293B', borderColor: '#334155', borderWidth: 1, paddingVertical: 8 }]} onPress={() => setEmojiModalVisible(true)}>
-                      <RNText style={{ fontSize: 16 }}>😀</RNText>
+                      <Icon.Smile size={16} color="#F8FAFC" />
                       <Text style={[styles.srcBtnLabel, { color: '#F8FAFC', fontSize: 13 }]}>Add Emoji</Text>
                     </TouchableOpacity>
                   </View>
@@ -2125,7 +2204,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                               onPress={() => setSelectedMusicTrack(t.id)}
                             >
                               <Text style={[styles.musicName, isSelected && styles.musicNameActive]} numberOfLines={1}>
-                                🎵 {t.name}
+                                {t.name}
                               </Text>
                               <Text style={styles.musicDur}>
                                 {t.startTime.toFixed(1)}s - {t.endTime.toFixed(1)}s
@@ -2692,7 +2771,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                     onPress={() => setFlash(f => f === 'off' ? 'on' : 'off')}
                     style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
                   >
-                    <RNText style={{ fontSize: 16 }}>{flash === 'on' ? '⚡' : '🔇'}</RNText>
+                    <Icon.Speed size={18} color={flash === 'on' ? '#f59e0b' : '#94a3b8'} />
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -2700,7 +2779,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                     onPress={() => setCameraPosition(p => p === 'back' ? 'front' : 'back')}
                     style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
                   >
-                    <RNText style={{ fontSize: 16 }}>🔄</RNText>
+                    <Icon.Rotate size={18} color="#fff" />
                   </TouchableOpacity>
                 </View>
               </SafeAreaView>
@@ -2722,7 +2801,7 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                     <View style={{ alignItems: 'center', gap: 6, width: '100%' }}>
                       {/* Selected track pill */}
                       <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, gap: 8, borderWidth: 1, borderColor: isRecording ? '#10B981' : 'rgba(255,255,255,0.1)' }}>
-                        <RNText style={{ fontSize: 16 }}>{isRecording ? '▶' : '🎵'}</RNText>
+                        {isRecording ? <Icon.Play size={14} color="#10B981" /> : <Icon.Music size={14} color="#fff" />}
                         <RNText numberOfLines={1} style={{ color: isRecording ? '#10B981' : '#fff', fontSize: 12, fontWeight: '700', maxWidth: 180 }}>
                           {preRecordMusic.name}
                         </RNText>
@@ -2741,9 +2820,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                             <TouchableOpacity
                               key={t.id}
                               onPress={() => setPreRecordMusic(t)}
-                              style={{ backgroundColor: preRecordMusic?.id === t.id ? '#df103f' : 'rgba(30,41,59,0.85)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: preRecordMusic?.id === t.id ? '#df103f' : 'rgba(255,255,255,0.15)' }}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: preRecordMusic?.id === t.id ? '#df103f' : 'rgba(30,41,59,0.85)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: preRecordMusic?.id === t.id ? '#df103f' : 'rgba(255,255,255,0.15)' }}
                             >
-                              <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 11, fontWeight: '600', maxWidth: 120 }}>🎵 {t.name}</RNText>
+                              <Icon.Music size={12} color="#fff" />
+                              <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 11, fontWeight: '600', maxWidth: 120 }}>{t.name}</RNText>
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
@@ -2758,9 +2838,10 @@ export default function VideoEditor({ route, navigation }: { route?: any; naviga
                             <TouchableOpacity
                               key={t.id}
                               onPress={() => setPreRecordMusic(t)}
-                              style={{ backgroundColor: 'rgba(30,41,59,0.85)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(30,41,59,0.85)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }}
                             >
-                              <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 11, fontWeight: '600', maxWidth: 120 }}>🎵 {t.name}</RNText>
+                              <Icon.Music size={12} color="#fff" />
+                              <RNText numberOfLines={1} style={{ color: '#fff', fontSize: 11, fontWeight: '600', maxWidth: 120 }}>{t.name}</RNText>
                             </TouchableOpacity>
                           ))}
                         </ScrollView>

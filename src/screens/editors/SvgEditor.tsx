@@ -24,6 +24,7 @@ import { Template } from '../../../types/template';
 import { getAllTemplates, svgUrlToFabricJSON, FabricObject, svgStringToFabricJSON } from '../../services/template.service';
 import PaidSubscriptionDialog from '../../components/common/PaidSubscriptionDialog';
 import api from '../../services/api.service';
+import { captureRef } from 'react-native-view-shot';
 import {
   UndoIcon,
   RedoIcon,
@@ -42,7 +43,11 @@ import {
   RotateIcon,
   TrashIcon,
   BoldIcon,
-  ItalicIcon
+  ItalicIcon,
+  ShareIcon,
+  CheckIcon,
+  StarIcon,
+  CrownIcon,
 } from '../../components/icons-svg';
 
 
@@ -883,6 +888,14 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [selectedTemplateForPurchase, setSelectedTemplateForPurchase] = useState<Template | null>(null);
+
+  // Export Modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportStatusText, setExportStatusText] = useState<string | null>(null);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const canvasCaptureRef = useRef<View>(null);
+
   // Toolbar & Panels state
   const [activeTab, setActiveTab] = useState<'templates' | 'add' | 'styles' | 'layers' | 'canvas'>('templates');
   const [editorPanelHidden, setEditorPanelHidden] = useState(false);
@@ -1405,136 +1418,98 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
     ]);
   };
 
-  const shareSvgFile = async (xmlContent: string) => {
-    try {
-      const ts = Date.now();
-      const tmpPath = `${RNFS.TemporaryDirectoryPath || RNFS.DocumentDirectoryPath}/flarelap_design_${ts}.svg`;
-      await RNFS.writeFile(tmpPath, xmlContent, 'utf8');
+  // Generate PNG snapshot from canvas view
+  const generatePngSnapshot = async (): Promise<string> => {
+    if (!canvasCaptureRef.current) {
+      throw new Error('Canvas artboard is not ready.');
+    }
+    // Deselect active element so bounding box and handles are hidden
+    setSelected(null);
+    // Allow brief render flush
+    await new Promise<void>((resolve) => setTimeout(resolve, 80));
 
-      await Share.open({
-        url: `file://${tmpPath}`,
-        type: 'image/svg+xml',
-      });
-    } catch (err: any) {
-      console.warn('shareSvgFile failed', err);
-      const isCancel = err?.message?.toLowerCase().includes('cancel') || err?.toString().toLowerCase().includes('cancel');
-      if (!isCancel) {
-        Alert.alert('Share Failed', 'Failed to share the SVG file.');
+    const uri = await captureRef(canvasCaptureRef, {
+      format: 'png',
+      quality: 1,
+      result: 'tmpfile',
+    });
+    return uri;
+  };
+
+  // Save PNG photo to device
+  const handleSavePng = async () => {
+    try {
+      setIsExporting(true);
+      setExportStatusText('Rendering high-res PNG photo...');
+      const tmpUri = await generatePngSnapshot();
+
+      setExportStatusText('Saving photo to device...');
+      const ts = Date.now();
+      const filename = `flarelap_photo_${ts}.png`;
+      let destPath = '';
+      if (Platform.OS === 'android') {
+        destPath = `${RNFS.DownloadDirectoryPath}/${filename}`;
+      } else {
+        destPath = `${RNFS.DocumentDirectoryPath}/${filename}`;
       }
+
+      if (tmpUri.startsWith('file://')) {
+        await RNFS.copyFile(tmpUri.replace('file://', ''), destPath);
+      } else {
+        await RNFS.copyFile(tmpUri, destPath);
+      }
+
+      if (Platform.OS === 'android' && RNFS.scanFile) {
+        try {
+          await RNFS.scanFile(destPath);
+        } catch {
+          // ignore scan error
+        }
+      }
+
+      setExportSuccessMessage(`Photo saved as ${filename}`);
+      Alert.alert(
+        'Photo Saved',
+        `Your design was saved in PNG format to ${Platform.OS === 'android' ? 'Downloads / Gallery' : 'Files'}.\n\nFilename: ${filename}`
+      );
+    } catch (err: any) {
+      console.warn('handleSavePng error', err);
+      Alert.alert('Save Failed', err?.message || 'Could not save PNG photo.');
+    } finally {
+      setIsExporting(false);
+      setExportStatusText(null);
     }
   };
 
-  // Standalone SVG Exporter
-  const handleExportSvg = () => {
-    const exportOffsetX = svgText ? canvasMetrics.minX : 0;
-    const exportOffsetY = svgText ? canvasMetrics.minY : 0;
+  // Share PNG photo via native share sheet
+  const handleSharePng = async () => {
+    try {
+      setIsExporting(true);
+      setExportStatusText('Generating PNG for sharing...');
+      const tmpUri = await generatePngSnapshot();
 
-    const itemToSvgTag = (it: Item) => {
-      const x = it.x + exportOffsetX;
-      const y = it.y + exportOffsetY;
-      const w = it.width;
-      const h = it.height;
-      const rot = it.rotation;
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const transform = rot ? ` transform="rotate(${rot} ${cx.toFixed(1)} ${cy.toFixed(1)})"` : '';
-      const fc = it.color || '#000000';
-      const opacityAttr = it.opacity !== undefined && it.opacity < 1 ? ` opacity="${it.opacity}"` : '';
-
-      switch (it.type) {
-        case 'text': {
-          const fs = it.fontSize ?? 16;
-          const fw = it.fontWeight === 'bold' ? ' font-weight="bold"' : '';
-          const fst = it.fontStyle === 'italic' ? ' font-style="italic"' : '';
-          const textEscaped = (it.text ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
-          const ta = it.textAlign === 'left' ? 'start' : it.textAlign === 'right' ? 'end' : 'middle';
-          return `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" font-size="${fs.toFixed(1)}" fill="${fc}"${fw}${fst} text-anchor="${ta}" dominant-baseline="central"${transform} font-family="System">${textEscaped}</text>`;
-        }
-        case 'image':
-          return `<image x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" href="${it.uri}"${opacityAttr}${transform}/>`;
-        case 'shape': {
-          const sw = it.strokeWidth ?? 0;
-          const sc = it.strokeColor ?? '#000000';
-          const strokeAttr = sw > 0 ? ` stroke="${sc}" stroke-width="${sw.toFixed(1)}"` : '';
-          const rxVal = it.borderRadius ?? 0;
-
-          if (it.shapeType === 'rect') {
-            const rxAttr = rxVal > 0 ? ` rx="${rxVal.toFixed(1)}"` : '';
-            return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${fc}"${strokeAttr}${rxAttr}${transform}${opacityAttr}/>`;
-          } else if (it.shapeType === 'circle') {
-            const rad = Math.min(w, h) / 2;
-            return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${rad.toFixed(1)}" fill="${fc}"${strokeAttr}${transform}${opacityAttr}/>`;
-          } else if (it.shapeType === 'triangle') {
-            return `<polygon points="${cx.toFixed(1)},${(y + sw).toFixed(1)} ${(x + w - sw).toFixed(1)}, ${(y + h - sw).toFixed(1)} ${(x + sw).toFixed(1)}, ${(y + h - sw).toFixed(1)}" fill="${fc}"${strokeAttr}${transform}${opacityAttr}/>`;
-          } else if (it.shapeType === 'star') {
-            // Star vertices inside outer space
-            const outerRadius = Math.min(w, h) / 2 - sw;
-            const innerRadius = outerRadius * 0.4;
-            const spikes = 5;
-            let currentRot = (Math.PI / 2) * 3;
-            const step = Math.PI / spikes;
-            const pointsList = [];
-
-            for (let i = 0; i < spikes; i++) {
-              let px = cx + Math.cos(currentRot) * outerRadius;
-              let py = cy + Math.sin(currentRot) * outerRadius;
-              pointsList.push(`${px.toFixed(1)},${py.toFixed(1)}`);
-              currentRot += step;
-
-              px = cx + Math.cos(currentRot) * innerRadius;
-              py = cy + Math.sin(currentRot) * innerRadius;
-              pointsList.push(`${px.toFixed(1)},${py.toFixed(1)}`);
-              currentRot += step;
-            }
-            return `<polygon points="${pointsList.join(' ')}" fill="${fc}"${strokeAttr}${transform}${opacityAttr}/>`;
-          } else if (it.shapeType === 'line') {
-            return `<line x1="${x.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${(x + w).toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${fc}" stroke-width="${(sw || 4).toFixed(1)}"${transform}${opacityAttr}/>`;
-          } else if (it.shapeType === 'path') {
-            const vb = it.pathViewBox || `0 0 ${it.width} ${it.height}`;
-            const dashAttr = it.strokeDasharray ? ` stroke-dasharray="${it.strokeDasharray}"` : '';
-            return `<svg x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" viewBox="${vb}"${transform}${opacityAttr}><path d="${it.pathD}" fill="${fc}"${strokeAttr}${dashAttr}/></svg>`;
-          }
-          return '';
-        }
-        default:
-          return '';
+      const shareUrl = tmpUri.startsWith('file://') ? tmpUri : `file://${tmpUri}`;
+      await Share.open({
+        url: shareUrl,
+        type: 'image/png',
+        title: 'Share PNG Design',
+      });
+    } catch (err: any) {
+      const isCancel = err?.message?.toLowerCase().includes('cancel') || err?.toString().toLowerCase().includes('cancel');
+      if (!isCancel) {
+        console.warn('handleSharePng error', err);
+        Alert.alert('Share Failed', err?.message || 'Failed to share PNG photo.');
       }
-    };
-
-    const itemTags = items.map(itemToSvgTag).join('\n  ');
-    let finalSvg = '';
-
-    if (svgText) {
-      const closingIndex = svgText.lastIndexOf('</svg>');
-      if (closingIndex !== -1) {
-        const rootContent = svgText.substring(0, closingIndex);
-        finalSvg = `${rootContent}\n  <!-- User Added Overlays -->\n  ${itemTags}\n</svg>`;
-      } else {
-        finalSvg = `${svgText}\n<!-- Overlays -->\n${itemTags}`;
-      }
-    } else {
-      finalSvg = `<svg width="${canvasMetrics.width}" height="${canvasMetrics.height}" viewBox="0 0 ${canvasMetrics.width} ${canvasMetrics.height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <rect width="${canvasMetrics.width}" height="${canvasMetrics.height}" fill="${bgColor}"/>
-  <!-- User Added Overlays -->
-  ${itemTags}
-</svg>`;
+    } finally {
+      setIsExporting(false);
+      setExportStatusText(null);
     }
+  };
 
-    Alert.alert('SVG Export Ready', 'Your custom Canva design is compiled. What would you like to do?', [
-      { text: 'Share SVG File', onPress: () => shareSvgFile(finalSvg) },
-      { text: 'Copy to Clipboard', onPress: () => Alert.alert('Copied', 'SVG XML text copied to clip!') },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-
-    // Print SVG structure in console log for inspection
-    console.log('--- EXPORTED SVG XML ---');
-    console.log(finalSvg);
-    console.log('------------------------');
+  // Open Export Modal
+  const handleOpenExport = () => {
+    setExportSuccessMessage(null);
+    setShowExportModal(true);
   };
 
   return (
@@ -1569,7 +1544,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
             >
               <RedoIcon size={18} color={historyIndex >= history.length - 1 ? '#cbd5e1' : '#0f172a'} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleExportSvg} style={styles.exportBtn}>
+            <TouchableOpacity onPress={handleOpenExport} style={styles.exportBtn}>
               <DownloadIcon size={16} color="#ffffff" />
             </TouchableOpacity>
           </View>
@@ -1582,11 +1557,16 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
             <View style={styles.checkerboard} />
 
             {/* Design Artboard */}
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={() => setSelected(null)}
+            <View
+              ref={canvasCaptureRef}
+              collapsable={false}
               style={[styles.artboard, { width: canvasFrame.width, height: canvasFrame.height, backgroundColor: bgColor }]}
             >
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setSelected(null)}
+                style={StyleSheet.absoluteFillObject}
+              />
               {loading ? (
                 <ActivityIndicator size="large" color="#df103f" style={StyleSheet.absoluteFillObject} />
               ) : error ? (
@@ -1617,7 +1597,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                   />
                 ))}
               </View>
-            </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -1660,7 +1640,8 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                         <Image source={{ uri: tmpl.thumbnail }} style={styles.templateImage} />
                         {tmpl.is_paid && (
                           <View style={styles.premiumBadge}>
-                            <Text style={styles.premiumBadgeText}>★ PRO</Text>
+                            <CrownIcon size={10} color="#ffffff" fill="#ffffff" />
+                            <Text style={styles.premiumBadgeText}>PRO</Text>
                           </View>
                         )}
                       </View>
@@ -1715,7 +1696,7 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                         <Text style={styles.addBtnLabel}>Triangle</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.addBtn} onPress={() => addShape('star')}>
-                        <Text style={{ fontSize: 16 }}>★</Text>
+                        <StarIcon size={18} color="#334155" fill="#334155" />
                         <Text style={styles.addBtnLabel}>Star</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.addBtn} onPress={() => addShape('line')}>
@@ -1981,9 +1962,15 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
                             onPress={() => setSelected(it.id)}
                           >
                             <View style={styles.layerInfo}>
-                              <Text style={styles.layerTypeSymbol}>
-                                {it.type === 'text' ? 'T' : it.type === 'shape' ? '⬡' : '🖼'}
-                              </Text>
+                              <View style={styles.layerTypeIconWrap}>
+                                {it.type === 'text' ? (
+                                  <TextIcon size={14} color="#df103f" />
+                                ) : it.type === 'shape' ? (
+                                  <ShapeIcon size={14} color="#df103f" />
+                                ) : (
+                                  <ImageIcon size={14} color="#df103f" />
+                                )}
+                              </View>
                               <Text style={styles.layerTitle} numberOfLines={1}>
                                 {it.type === 'text'
                                   ? `Text: "${it.text}"`
@@ -2107,6 +2094,103 @@ export default function SvgEditor({ route, navigation, category }: { route?: any
               )}
             />
             <Button onPress={() => setShowSocialModal(false)} style={styles.modalCloseBtn}>Close</Button>
+          </Modal>
+        </Portal>
+
+        {/* Professional Export Modal */}
+        <Portal>
+          <Modal
+            visible={showExportModal}
+            onDismiss={() => !isExporting && setShowExportModal(false)}
+            contentContainerStyle={styles.exportModalContainer}
+          >
+            <View style={styles.exportModalCard}>
+              {/* Header */}
+              <View style={styles.exportHeaderRow}>
+                <View style={styles.exportHeaderTitleGroup}>
+                  <View style={styles.exportIconBadge}>
+                    <DownloadIcon size={20} color="#df103f" />
+                  </View>
+                  <View>
+                    <Text style={styles.exportModalTitle}>Export Design</Text>
+                    <Text style={styles.exportModalSubtitle}>Download photo or share with others</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowExportModal(false)}
+                  disabled={isExporting}
+                  style={styles.exportCloseBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close export dialog"
+                >
+                  <CloseIcon size={16} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Photo Preview Specs Card */}
+              <View style={styles.photoSpecsCard}>
+                <View style={styles.photoSpecsTop}>
+                  <View style={styles.photoSpecsIconWrap}>
+                    <ImageIcon size={20} color="#df103f" />
+                  </View>
+                  <View style={styles.photoSpecsInfo}>
+                    <Text style={styles.photoSpecsTitle}>High-Resolution PNG</Text>
+                    <Text style={styles.photoSpecsDesc}>
+                      Crisp photo format for WhatsApp, Instagram, printing & gallery
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.photoSpecsPillRow}>
+                  <View style={styles.formatPill}>
+                    <Text style={styles.formatPillText}>
+                      {Math.round(canvasMetrics.width)} × {Math.round(canvasMetrics.height)} px
+                    </Text>
+                  </View>
+                  <View style={[styles.formatPill, styles.losslessPill]}>
+                    <Text style={styles.losslessPillText}>Lossless Quality</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Success Banner */}
+              {exportSuccessMessage && (
+                <View style={styles.exportSuccessBanner}>
+                  <CheckIcon size={14} color="#059669" />
+                  <Text style={styles.exportSuccessText} numberOfLines={2}>
+                    {exportSuccessMessage}
+                  </Text>
+                </View>
+              )}
+
+              {/* Progress Box */}
+              {isExporting ? (
+                <View style={styles.exportProgressBox}>
+                  <ActivityIndicator size="small" color="#df103f" />
+                  <Text style={styles.exportProgressText}>{exportStatusText || 'Processing photo...'}</Text>
+                </View>
+              ) : (
+                /* Action Buttons */
+                <View style={styles.exportActionsContainer}>
+                  <TouchableOpacity
+                    style={styles.primaryExportBtn}
+                    onPress={handleSavePng}
+                    activeOpacity={0.8}
+                  >
+                    <DownloadIcon size={18} color="#ffffff" />
+                    <Text style={styles.primaryExportBtnText}>Save Photo to Device</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.secondaryExportBtn}
+                    onPress={handleSharePng}
+                    activeOpacity={0.8}
+                  >
+                    <ShareIcon size={18} color="#0f172a" />
+                    <Text style={styles.secondaryExportBtnText}>Share PNG Photo</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </Modal>
         </Portal>
 
@@ -2390,7 +2474,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff1f2',
   },
   layerInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  layerTypeSymbol: { fontSize: 16, fontWeight: 'bold', color: '#df103f', width: 24, textAlign: 'center' },
+  layerTypeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   layerTitle: { fontSize: 13, color: '#334155', fontWeight: '600', flex: 1 },
   layerActions: { flexDirection: 'row', gap: 4 },
   layerControlBtn: {
@@ -2444,10 +2535,210 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   premiumBadgeText: {
     color: '#ffffff',
     fontSize: 9,
     fontWeight: 'bold',
+  },
+
+  // Professional Export Modal Styles
+  exportModalContainer: {
+    backgroundColor: 'transparent',
+    padding: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exportModalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 22,
+    width: '100%',
+    maxWidth: 420,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    elevation: 10,
+  },
+  exportHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  exportHeaderTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  exportHeaderTexts: {
+    flex: 1,
+  },
+  exportIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#fff1f2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exportModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  exportModalSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  exportCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoSpecsCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    padding: 16,
+    marginBottom: 16,
+  },
+  photoSpecsTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  photoSpecsIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoSpecsInfo: {
+    flex: 1,
+  },
+  photoSpecsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  photoSpecsDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  photoSpecsPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  losslessPill: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  losslessPillText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#166534',
+  },
+  formatPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  formatPillText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  exportSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  exportSuccessText: {
+    fontSize: 12,
+    color: '#065f46',
+    fontWeight: '600',
+    flex: 1,
+  },
+  exportProgressBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 18,
+  },
+  exportProgressText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  exportActionsContainer: {
+    gap: 10,
+    marginTop: 4,
+  },
+  primaryExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#df103f',
+    paddingVertical: 13,
+    borderRadius: 12,
+    shadowColor: '#df103f',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  primaryExportBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  secondaryExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  secondaryExportBtnText: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
